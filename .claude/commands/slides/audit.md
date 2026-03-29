@@ -29,6 +29,7 @@ Checks performed:
 3. CORAL components on CORAL background (invisible)
 4. Text color violations (invisible text, low contrast)
 5. Accent bar violations (light bars on light bg, dark bars on dark bg)
+6. Non-brand colors (fills or text using colors outside the 6-color palette)
 """
 import sys, json
 from pptx import Presentation
@@ -41,6 +42,7 @@ LTBLUE = "B4DCFA"
 LTPURPLE = "FAB9FF"
 WHITE = "FFFFFF"
 
+BRAND_COLORS = {NAVY, CORAL, MAROON, LTBLUE, LTPURPLE, WHITE}
 LIGHT_FILLS = {WHITE, LTBLUE, LTPURPLE, "F5F5F5", "F0F0F2"}
 DARK_FILLS = {NAVY, MAROON}
 
@@ -230,6 +232,44 @@ def audit(pptx_path):
                     "fix": f"Change bar color to {'NAVY or MAROON' if is_light_bg else 'WHITE or LTBLUE'}"
                 })
 
+        # ── Check 6: Non-brand colors ──────────────────────────────────
+        seen_non_brand = set()
+        for f in filled:
+            if f["c"] not in BRAND_COLORS and f["c"] not in seen_non_brand:
+                seen_non_brand.add(f["c"])
+                violations.append({
+                    "slide": sn, "check": "non_brand_color",
+                    "msg": f"S{sn}: Non-brand fill color #{f['c']}",
+                    "fix": "Replace with nearest brand color from palette (NAVY/CORAL/MAROON/LTBLUE/LTPURPLE/WHITE)"
+                })
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for para in shape.text_frame.paragraphs:
+                if not para.text.strip():
+                    continue
+                tc = None
+                try:
+                    if para.font.color and para.font.color.rgb:
+                        tc = str(para.font.color.rgb)
+                except Exception:
+                    pass
+                if tc is None:
+                    for run in para.runs:
+                        try:
+                            if run.font.color and run.font.color.rgb:
+                                tc = str(run.font.color.rgb)
+                                break
+                        except Exception:
+                            pass
+                if tc and tc not in BRAND_COLORS and tc not in seen_non_brand:
+                    seen_non_brand.add(tc)
+                    violations.append({
+                        "slide": sn, "check": "non_brand_color",
+                        "msg": f"S{sn}: Non-brand text color #{tc}: '{para.text[:30]}'",
+                        "fix": "Replace with NAVY (on light bg) or WHITE (on dark bg)"
+                    })
+
     return violations, slide_count
 
 
@@ -277,6 +317,7 @@ Slides: <count> | Violations: <count>
 - Invisible fills: <count>
 - Text contrast: <count>
 - Bar contrast: <count>
+- Non-brand colors: <count>
 ```
 
 ### If no violations:

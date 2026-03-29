@@ -202,18 +202,20 @@ def dt(sl, l, t, c, sz=Pt(8)):
     s.fill.solid(); s.fill.fore_color.rgb = c; s.line.fill.background()
 
 def harr(sl, x, y, w, c=CORAL, h=Inches(0.09)):
-    """Horizontal right arrow."""
+    """Horizontal right arrow. Override c on CORAL slides (use WHITE/LTBLUE)."""
     s = sl.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, x, y, w, h)
     s.fill.solid(); s.fill.fore_color.rgb = c; s.line.fill.background()
 
 def varr(sl, x, y, h, c=CORAL, w=Inches(0.09)):
-    """Vertical down arrow."""
+    """Vertical down arrow. Override c on CORAL slides (use WHITE/LTBLUE)."""
     s = sl.shapes.add_shape(MSO_SHAPE.DOWN_ARROW, x, y, w, h)
     s.fill.solid(); s.fill.fore_color.rgb = c; s.line.fill.background()
 
 def fnode(sl, x, y, w, h, label, bar_clr, sz=8, bg=CORAL, tc=WHITE):
     """Flow node: card with left accent bar and label.
-    bg/tc can be overridden for nesting (e.g. bg=WHITE, tc=NAVY inside CORAL parent)."""
+    bg/tc can be overridden for nesting (e.g. bg=WHITE, tc=NAVY inside CORAL parent).
+    bar_clr must follow slide-level rule: dark bars (NAVY/MAROON) on LTBLUE slides,
+    light bars (WHITE/LTBLUE) on CORAL slides — regardless of the card's own bg."""
     rr(sl, x, y, w, h, fill=bg, border=bg, bw=Pt(0.5))
     rc(sl, x, y, Pt(2), h, bar_clr)
     tx(sl, x + Inches(0.08), y + Inches(0.02), w - Inches(0.12), h - Inches(0.04),
@@ -285,95 +287,252 @@ if __name__ == '__main__':
 
 ## Auto-Audit Script
 
-After generating the `.pptx`, write this script to a temp file and run it against the output. Fix any violations and re-generate.
+After generating the `.pptx`, write this script to `/tmp/cit_slide_audit.py` and run it against the output. Parse the JSON output to check for violations. Fix any violations in the generation script and re-run until 0 violations.
 
 ```python
 #!/usr/bin/env python3
-"""Audit CI&T slides for design rule violations."""
-import sys
+"""Audit CI&T slides for design rule violations. Outputs JSON."""
+import sys, json
 from pptx import Presentation
 
-NAVY="000050"; CORAL="FA5A50"; MAROON="690037"
-LTBLUE="B4DCFA"; LTPURPLE="FAB9FF"; WHITE="FFFFFF"
-LIGHT_FILLS={WHITE,LTBLUE,LTPURPLE,"F5F5F5","F0F0F2"}
-DARK_FILLS={NAVY,MAROON}
+NAVY = "000050"
+CORAL = "FA5A50"
+MAROON = "690037"
+LTBLUE = "B4DCFA"
+LTPURPLE = "FAB9FF"
+WHITE = "FFFFFF"
+
+BRAND_COLORS = {NAVY, CORAL, MAROON, LTBLUE, LTPURPLE, WHITE}
+LIGHT_FILLS = {WHITE, LTBLUE, LTPURPLE, "F5F5F5", "F0F0F2"}
+DARK_FILLS = {NAVY, MAROON}
+
+COLOR_NAMES = {
+    NAVY: "NAVY", CORAL: "CORAL", MAROON: "MAROON",
+    LTBLUE: "LTBLUE", LTPURPLE: "LTPURPLE", WHITE: "WHITE",
+    "F5F5F5": "LTGRAY", "F0F0F2": "LTGRAY2"
+}
+
+
+def name(c):
+    return COLOR_NAMES.get(c, f"#{c}")
+
 
 def audit(pptx_path):
-    prs=Presentation(pptx_path); violations=[]
-    for si,slide in enumerate(prs.slides):
-        slide_bg="?"
-        try: slide_bg=str(slide.background.fill.fore_color.rgb)
-        except: pass
-        is_light_bg=slide_bg in LIGHT_FILLS; is_coral_bg=slide_bg==CORAL
-        filled=[]
+    prs = Presentation(pptx_path)
+    violations = []
+    slide_count = len(prs.slides)
+
+    for si, slide in enumerate(prs.slides):
+        sn = si + 1
+
+        slide_bg = "?"
+        try:
+            slide_bg = str(slide.background.fill.fore_color.rgb)
+        except Exception:
+            pass
+
+        is_light_bg = slide_bg in LIGHT_FILLS
+        is_coral_bg = slide_bg == CORAL
+
+        filled = []
         for shape in slide.shapes:
             try:
-                fc=str(shape.fill.fore_color.rgb)
-                filled.append({'c':fc,'l':shape.left,'t':shape.top,
-                    'r':shape.left+shape.width,'b':shape.top+shape.height,
-                    'a':shape.width*shape.height,
-                    'w_pt':shape.width/12700,'h_pt':shape.height/12700})
-            except: pass
-        # Sort DESCENDING so last match = innermost (smallest) container
-        filled_desc=sorted(filled,key=lambda f:f['a'],reverse=True)
+                fc = str(shape.fill.fore_color.rgb)
+                filled.append({
+                    "c": fc,
+                    "l": shape.left, "t": shape.top,
+                    "r": shape.left + shape.width,
+                    "b": shape.top + shape.height,
+                    "a": shape.width * shape.height,
+                    "w_pt": shape.width / 12700,
+                    "h_pt": shape.height / 12700,
+                })
+            except Exception:
+                pass
+
+        # Sort DESCENDING by area — last match = innermost (smallest) container
+        filled_desc = sorted(filled, key=lambda f: f["a"], reverse=True)
+
         # Check 1: Same-color nesting
         for child in filled:
             for parent in filled:
-                if child is parent or child['a']>=parent['a']: continue
-                if(parent['l']<=child['l'] and child['r']<=parent['r'] and
-                   parent['t']<=child['t'] and child['b']<=parent['b']):
-                    if child['c']==parent['c'] and child['c'] not in(WHITE,NAVY):
-                        violations.append(f"S{si+1}: NEST #{child['c']} inside #{parent['c']}"); break
+                if child is parent or child["a"] >= parent["a"]:
+                    continue
+                if (parent["l"] <= child["l"] and child["r"] <= parent["r"] and
+                        parent["t"] <= child["t"] and child["b"] <= parent["b"]):
+                    if child["c"] == parent["c"] and child["c"] not in (WHITE, NAVY):
+                        violations.append({
+                            "slide": sn, "check": "nesting",
+                            "msg": f"S{sn}: {name(child['c'])} nested inside {name(parent['c'])} (same color)",
+                            "fix": "Change inner shape fill to a contrasting color"
+                        })
+                        break
+
         # Check 2: LTBLUE on LTBLUE bg
-        if slide_bg==LTBLUE:
-            coral_rects=[(f['l'],f['t'],f['r'],f['b']) for f in filled if f['c']==CORAL]
+        if slide_bg == LTBLUE:
+            coral_rects = [(f["l"], f["t"], f["r"], f["b"])
+                           for f in filled if f["c"] == CORAL]
             for f in filled:
-                if f['c']==LTBLUE and f['a']>914400*914400*0.02:
-                    in_coral=any(cl<=f['l'] and f['r']<=cr and ct<=f['t'] and f['b']<=cb for cl,ct,cr,cb in coral_rects)
-                    if not in_coral: violations.append(f"S{si+1}: LTBLUE component on LTBLUE bg")
+                if f["c"] == LTBLUE and f["a"] > 914400 * 914400 * 0.02:
+                    in_coral = any(
+                        cl <= f["l"] and f["r"] <= cr and ct <= f["t"] and f["b"] <= cb
+                        for cl, ct, cr, cb in coral_rects)
+                    if not in_coral:
+                        violations.append({
+                            "slide": sn, "check": "invisible_fill",
+                            "msg": f"S{sn}: LTBLUE component on LTBLUE background (invisible)",
+                            "fix": "Change fill to CORAL or WHITE"
+                        })
+
         # Check 3: CORAL on CORAL bg
-        if slide_bg==CORAL:
-            white_rects=[(f['l'],f['t'],f['r'],f['b']) for f in filled if f['c']==WHITE]
+        if slide_bg == CORAL:
+            white_rects = [(f["l"], f["t"], f["r"], f["b"])
+                           for f in filled if f["c"] == WHITE]
             for f in filled:
-                if f['c']==CORAL and f['a']>914400*914400*0.02:
-                    in_white=any(wl<=f['l'] and f['r']<=wr and wt<=f['t'] and f['b']<=wb for wl,wt,wr,wb in white_rects)
-                    if not in_white: violations.append(f"S{si+1}: CORAL component on CORAL bg")
+                if f["c"] == CORAL and f["a"] > 914400 * 914400 * 0.02:
+                    in_white = any(
+                        wl <= f["l"] and f["r"] <= wr and wt <= f["t"] and f["b"] <= wb
+                        for wl, wt, wr, wb in white_rects)
+                    if not in_white:
+                        violations.append({
+                            "slide": sn, "check": "invisible_fill",
+                            "msg": f"S{sn}: CORAL component on CORAL background (invisible)",
+                            "fix": "Change fill to WHITE or LTBLUE"
+                        })
+
         # Check 4: Text color violations
         for shape in slide.shapes:
-            if not shape.has_text_frame: continue
+            if not shape.has_text_frame:
+                continue
             for para in shape.text_frame.paragraphs:
-                if not para.text.strip(): continue
-                tc=None
+                if not para.text.strip():
+                    continue
+                tc = None
                 try:
-                    if para.font.color and para.font.color.rgb: tc=str(para.font.color.rgb)
-                except: pass
+                    if para.font.color and para.font.color.rgb:
+                        tc = str(para.font.color.rgb)
+                except Exception:
+                    pass
                 if tc is None:
                     for run in para.runs:
                         try:
-                            if run.font.color and run.font.color.rgb: tc=str(run.font.color.rgb); break
-                        except: pass
-                if tc is None: continue
-                sx,sy=shape.left,shape.top; ebg=slide_bg
+                            if run.font.color and run.font.color.rgb:
+                                tc = str(run.font.color.rgb)
+                                break
+                        except Exception:
+                            pass
+                if tc is None:
+                    continue
+
+                sx, sy = shape.left, shape.top
+                ebg = slide_bg
                 for f in filled_desc:
-                    if f['l']<=sx<=f['r'] and f['t']<=sy<=f['b']: ebg=f['c']
-                txt=para.text[:25]
-                if tc==ebg: violations.append(f"S{si+1}: #{tc} text on #{ebg} (SAME): '{txt}'")
-                if tc==WHITE and ebg in LIGHT_FILLS: violations.append(f"S{si+1}: WHITE text on light #{ebg}: '{txt}'")
-                if tc in(LTBLUE,LTPURPLE) and ebg in LIGHT_FILLS: violations.append(f"S{si+1}: light #{tc} on light #{ebg}: '{txt}'")
+                    if f["l"] <= sx <= f["r"] and f["t"] <= sy <= f["b"]:
+                        ebg = f["c"]
+
+                txt = para.text[:30]
+                if tc == ebg:
+                    violations.append({
+                        "slide": sn, "check": "text_invisible",
+                        "msg": f"S{sn}: {name(tc)} text on {name(ebg)} (SAME COLOR): '{txt}'",
+                        "fix": f"Change text to {'WHITE' if ebg == CORAL else 'NAVY'}"
+                    })
+                if tc == WHITE and ebg in LIGHT_FILLS:
+                    violations.append({
+                        "slide": sn, "check": "text_low_contrast",
+                        "msg": f"S{sn}: WHITE text on light {name(ebg)}: '{txt}'",
+                        "fix": "Change text to NAVY"
+                    })
+                if tc in (LTBLUE, LTPURPLE) and ebg in LIGHT_FILLS:
+                    violations.append({
+                        "slide": sn, "check": "text_low_contrast",
+                        "msg": f"S{sn}: {name(tc)} text on light {name(ebg)}: '{txt}'",
+                        "fix": "Change text to NAVY"
+                    })
+
         # Check 5: Accent bar violations
         for f in filled:
-            is_thin=(f['w_pt']<=5 or f['h_pt']<=5) and f['w_pt']>0.5 and f['h_pt']>0.5
-            if not is_thin: continue
-            if is_light_bg and f['c'] in LIGHT_FILLS: violations.append(f"S{si+1}: LIGHT bar #{f['c']} on LIGHT bg #{slide_bg}")
-            if is_coral_bg and f['c'] in DARK_FILLS: violations.append(f"S{si+1}: DARK bar #{f['c']} on CORAL bg")
-            if f['c']==slide_bg: violations.append(f"S{si+1}: bar #{f['c']} = slide bg (invisible)")
-    return violations
+            is_thin = ((f["w_pt"] <= 5 or f["h_pt"] <= 5) and
+                       f["w_pt"] > 0.5 and f["h_pt"] > 0.5)
+            if not is_thin:
+                continue
+            if is_light_bg and f["c"] in LIGHT_FILLS:
+                violations.append({
+                    "slide": sn, "check": "bar_contrast",
+                    "msg": f"S{sn}: Light bar ({name(f['c'])}) on light bg ({name(slide_bg)})",
+                    "fix": "Change bar to NAVY or MAROON"
+                })
+            if is_coral_bg and f["c"] in DARK_FILLS:
+                violations.append({
+                    "slide": sn, "check": "bar_contrast",
+                    "msg": f"S{sn}: Dark bar ({name(f['c'])}) on CORAL bg",
+                    "fix": "Change bar to WHITE or LTBLUE"
+                })
+            if f["c"] == slide_bg:
+                violations.append({
+                    "slide": sn, "check": "bar_invisible",
+                    "msg": f"S{sn}: Bar ({name(f['c'])}) matches slide bg (invisible)",
+                    "fix": f"Change bar to {'NAVY or MAROON' if is_light_bg else 'WHITE or LTBLUE'}"
+                })
 
-path=sys.argv[1]
-violations=audit(path)
-print(f"Violations: {len(violations)}")
-for v in violations: print(f"  ❌ {v}")
-if not violations: print("  ✅ ALL CLEAR")
+        # Check 6: Non-brand colors
+        seen_non_brand = set()
+        for f in filled:
+            if f["c"] not in BRAND_COLORS and f["c"] not in seen_non_brand:
+                seen_non_brand.add(f["c"])
+                violations.append({
+                    "slide": sn, "check": "non_brand_color",
+                    "msg": f"S{sn}: Non-brand fill color #{f['c']}",
+                    "fix": "Replace with nearest brand color"
+                })
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for para in shape.text_frame.paragraphs:
+                if not para.text.strip():
+                    continue
+                tc = None
+                try:
+                    if para.font.color and para.font.color.rgb:
+                        tc = str(para.font.color.rgb)
+                except Exception:
+                    pass
+                if tc is None:
+                    for run in para.runs:
+                        try:
+                            if run.font.color and run.font.color.rgb:
+                                tc = str(run.font.color.rgb)
+                                break
+                        except Exception:
+                            pass
+                if tc and tc not in BRAND_COLORS and tc not in seen_non_brand:
+                    seen_non_brand.add(tc)
+                    violations.append({
+                        "slide": sn, "check": "non_brand_color",
+                        "msg": f"S{sn}: Non-brand text color #{tc}: '{para.text[:30]}'",
+                        "fix": "Replace with NAVY (light bg) or WHITE (dark bg)"
+                    })
+
+    return violations, slide_count
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python3 cit_slide_audit.py <path.pptx>")
+        sys.exit(1)
+    path = sys.argv[1]
+    violations, slide_count = audit(path)
+    result = {
+        "file": path,
+        "slide_count": slide_count,
+        "violation_count": len(violations),
+        "violations": violations
+    }
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 If the audit reports violations, analyze each one, fix the generation script, and re-run. Repeat until 0 violations. Then review any edge-case violations using your understanding of shape nesting to determine if they are true violations or false positives caused by overlapping bounding boxes.
