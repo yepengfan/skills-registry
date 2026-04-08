@@ -63,9 +63,9 @@ get_field() {
   echo "$json" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-v = d.get('$field')
+v = d.get(sys.argv[1])
 print(v if v is not None else '')
-" 2>/dev/null
+" "$field" 2>/dev/null
 }
 
 # Get a list field from frontmatter JSON (one item per line)
@@ -74,11 +74,11 @@ get_list_field() {
   echo "$json" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-v = d.get('$field', [])
+v = d.get(sys.argv[1], [])
 if isinstance(v, list):
     for item in v:
         print(item)
-" 2>/dev/null
+" "$field" 2>/dev/null
 }
 
 # ── Discovery ────────────────────────────────────────────────
@@ -111,6 +111,18 @@ list_skills() {
     fi
   done | sort
   eval "$_old_nullglob" 2>/dev/null || true
+}
+
+# Check tool dependencies from frontmatter and warn about missing ones
+check_tools() {
+  local fm="$1"
+  local tool
+  while IFS= read -r tool; do
+    [[ -n "$tool" ]] || continue
+    if ! command -v "$tool" &>/dev/null; then
+      echo -e "${yellow}  Warning: tool '$tool' not found on PATH${reset}"
+    fi
+  done < <(get_list_field "$fm" "tools")
 }
 
 # ── Skill Installation ───────────────────────────────────────
@@ -163,14 +175,7 @@ install_agent() {
   {
     echo "<!-- agent-registry-path: $agent_dir -->"
     echo ""
-    python3 -c "
-content = open('$agent_file').read()
-parts = content.split('---', 2)
-if len(parts) >= 3:
-    print(parts[2].lstrip())
-else:
-    print(content)
-"
+    python3 "$REGISTRY_DIR/lib/parse_frontmatter.py" --body "$agent_file"
   } > "$dst"
 
   echo -e "${green}  Agent $name -> $dst${reset}"
@@ -185,14 +190,7 @@ else:
     install_skill "$skill"
   done < <(get_list_field "$fm" "skills")
 
-  # Check tool dependencies
-  local tool
-  while IFS= read -r tool; do
-    [[ -n "$tool" ]] || continue
-    if ! command -v "$tool" &>/dev/null; then
-      echo -e "${yellow}  Warning: tool '$tool' not found on PATH${reset}"
-    fi
-  done < <(get_list_field "$fm" "tools")
+  check_tools "$fm"
 
   echo -e "${green}Installed agent: $name${reset}"
 }
@@ -218,17 +216,10 @@ install_agent_project() {
 
   # Extract body (without frontmatter)
   local body
-  body="$(python3 -c "
-content = open('$agent_file').read()
-parts = content.split('---', 2)
-if len(parts) >= 3:
-    print(parts[2].lstrip())
-else:
-    print(content)
-")"
+  body="$(python3 "$REGISTRY_DIR/lib/parse_frontmatter.py" --body "$agent_file")"
 
-  # Update ref/ paths to point to local .claude/ref/<name>/
-  body="$(echo "$body" | sed "s|ref/|.claude/ref/$name/|g")"
+  # Update backtick-quoted ref/ paths to point to local .claude/ref/<name>/
+  body="$(echo "$body" | sed "s|\`ref/|\`.claude/ref/$name/|g")"
 
   if [[ -f "$claude_md" ]]; then
     {
@@ -260,6 +251,8 @@ else:
     echo -e "  Installing skill dependency: $skill"
     install_skill "$skill"
   done < <(get_list_field "$fm" "skills")
+
+  check_tools "$fm"
 
   echo -e "${green}Installed agent $name into project: $target_dir${reset}"
 }
@@ -300,12 +293,12 @@ uninstall_agent() {
   local dst="$CLAUDE_DIR/commands/$name.md"
 
   if [[ -f "$dst" ]]; then
-    # Verify it's from this registry
-    if head -1 "$dst" 2>/dev/null | grep -q "agent-registry-path:"; then
+    # Verify it's from this specific registry
+    if head -1 "$dst" 2>/dev/null | grep -q "agent-registry-path: $REGISTRY_DIR/"; then
       rm "$dst"
       echo -e "${yellow}  Removed agent: $name${reset}"
     else
-      echo -e "${yellow}  Skipped: $dst doesn't appear to be from this registry${reset}"
+      echo -e "${yellow}  Skipped: $dst not installed by this registry${reset}"
     fi
   else
     echo -e "${yellow}  Agent $name is not installed${reset}"
@@ -351,7 +344,7 @@ show_status() {
   echo -e "${bold}Agents:${reset}"
   for name in $(list_agents); do
     local dst="$CLAUDE_DIR/commands/$name.md"
-    if [[ -f "$dst" ]] && head -1 "$dst" 2>/dev/null | grep -q "agent-registry-path:"; then
+    if [[ -f "$dst" ]] && head -1 "$dst" 2>/dev/null | grep -q "agent-registry-path: $REGISTRY_DIR/"; then
       echo -e "  $name  [${green}installed${reset}]"
     else
       echo -e "  $name  [${red}not installed${reset}]"

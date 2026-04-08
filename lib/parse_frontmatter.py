@@ -5,11 +5,14 @@ import json
 import re
 
 
+FM_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+
 def parse_frontmatter(filepath):
     with open(filepath, "r") as f:
         content = f.read()
 
-    match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+    match = FM_PATTERN.match(content)
     if not match:
         return None
 
@@ -21,6 +24,18 @@ def parse_frontmatter(filepath):
         return yaml.safe_load(fm_text)
     except ImportError:
         return _simple_parse(fm_text)
+
+
+def extract_body(filepath):
+    """Return the markdown body after the frontmatter block."""
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    match = FM_PATTERN.match(content)
+    if not match:
+        return content
+
+    return content[match.end():].lstrip()
 
 
 def _simple_parse(text):
@@ -56,13 +71,17 @@ def _simple_parse(text):
             if not value:
                 continue
 
-            # Inline list: [item1, item2]
-            inline_list = re.match(r"^\[(.+)\]$", value)
+            # Inline list: [item1, item2] or []
+            inline_list = re.match(r"^\[(.*)\]$", value)
             if inline_list:
-                items = [
-                    i.strip().strip("\"'") for i in inline_list.group(1).split(",")
-                ]
-                result[current_key] = items
+                inner = inline_list.group(1).strip()
+                if not inner:
+                    result[current_key] = []
+                else:
+                    items = [
+                        i.strip().strip("\"'") for i in inner.split(",")
+                    ]
+                    result[current_key] = items
             else:
                 result[current_key] = value.strip("\"'")
 
@@ -83,13 +102,22 @@ def validate(data):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: parse_frontmatter.py <file.md>", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print("Usage: parse_frontmatter.py [--body] <file.md>", file=sys.stderr)
         sys.exit(1)
 
-    data = parse_frontmatter(sys.argv[1])
-    validate(data)
-    print(json.dumps(data, indent=2))
+    if sys.argv[1] == "--body":
+        if len(sys.argv) != 3:
+            print("Usage: parse_frontmatter.py --body <file.md>", file=sys.stderr)
+            sys.exit(1)
+        print(extract_body(sys.argv[2]))
+    else:
+        if len(sys.argv) != 2:
+            print("Usage: parse_frontmatter.py <file.md>", file=sys.stderr)
+            sys.exit(1)
+        data = parse_frontmatter(sys.argv[1])
+        validate(data)
+        print(json.dumps(data, indent=2))
 
 
 if __name__ == "__main__":

@@ -11,14 +11,16 @@ passed = 0
 failed = 0
 
 
-def run_parser(content):
+def run_parser(content, extra_args=None):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(content)
         f.flush()
         try:
-            return subprocess.run(
-                [sys.executable, SCRIPT, f.name], capture_output=True, text=True
-            )
+            cmd = [sys.executable, SCRIPT]
+            if extra_args:
+                cmd.extend(extra_args)
+            cmd.append(f.name)
+            return subprocess.run(cmd, capture_output=True, text=True)
         finally:
             os.unlink(f.name)
 
@@ -99,6 +101,41 @@ def test_no_args():
     check("usage message", "Usage" in result.stderr)
 
 
+def test_body_extraction():
+    content = (
+        "---\n"
+        "name: test\n"
+        "description: Test\n"
+        "version: 1.0.0\n"
+        "author: Me\n"
+        "---\n\n"
+        "Body content here.\n"
+        "Second line.\n"
+    )
+    result = run_parser(content, ["--body"])
+    check("--body exits 0", result.returncode == 0)
+    check("--body returns body", "Body content here." in result.stdout)
+    check("--body strips frontmatter", "name: test" not in result.stdout)
+    check("--body strips delimiters", "---" not in result.stdout)
+
+
+def test_empty_inline_list():
+    result = run_parser(
+        "---\n"
+        "name: empty-list\n"
+        "description: Agent with empty tags\n"
+        "version: 1.0.0\n"
+        "author: Me\n"
+        "tags: []\n"
+        "---\n\n"
+        "Body.\n"
+    )
+    check("empty list exits 0", result.returncode == 0)
+    data = json.loads(result.stdout)
+    check("empty list parsed as list", isinstance(data.get("tags"), list))
+    check("empty list is empty", data.get("tags") == [])
+
+
 if __name__ == "__main__":
     print("=== Frontmatter Parser Tests ===\n")
     test_valid_full()
@@ -106,5 +143,7 @@ if __name__ == "__main__":
     test_missing_required()
     test_no_frontmatter()
     test_no_args()
+    test_body_extraction()
+    test_empty_inline_list()
     print(f"\n=== Results: {passed} passed, {failed} failed ===")
     sys.exit(0 if failed == 0 else 1)
