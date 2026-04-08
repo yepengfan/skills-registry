@@ -14,12 +14,15 @@ If no arguments are given, ask the user for the content outline.
 The CI&T template is `template.pptx` in the skill package directory. Resolve it in the generated Python script:
 
 ```python
-import os
+import os, sys
 _cmd = os.path.realpath(os.path.expanduser("~/.claude/commands/slides/generate.md"))
 TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(_cmd)), "template.pptx")
+if not os.path.exists(TEMPLATE):
+    print(f"ERROR: Template not found at {TEMPLATE}")
+    sys.exit(1)
 ```
 
-If the resolved path does not exist, tell the user to place `template.pptx` in the `slides/` directory of the skills registry.
+If the resolved path does not exist (the script exits with an error), **stop and ask the user** to provide the CI&T `.pptx` template file. Once provided, place it at `slides/template.pptx` in the skills registry and retry. Do NOT proceed without a valid template.
 
 ## Workflow
 
@@ -119,7 +122,7 @@ Core principle: **light bg → NAVY text. CORAL bg → WHITE text (except title 
 ## Template Handling Pattern
 
 ```python
-import os
+import os, sys
 import copy
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -128,8 +131,12 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
 
+# Template resolution (see "Template resolution" section above)
 _cmd = os.path.realpath(os.path.expanduser("~/.claude/commands/slides/generate.md"))
 TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(_cmd)), "template.pptx")
+if not os.path.exists(TEMPLATE):
+    print(f"ERROR: Template not found at {TEMPLATE}")
+    sys.exit(1)
 
 # ── Brand Palette ─────────────────────────────────────────
 NAVY     = RGBColor(0x00, 0x00, 0x50)

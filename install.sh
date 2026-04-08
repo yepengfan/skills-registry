@@ -25,6 +25,8 @@ list_packages() {
   for dir in "$REGISTRY_DIR"/*/; do
     local name
     name="$(basename "$dir")"
+    # Skip hidden directories
+    [[ "$name" == .* ]] && continue
     # A valid package has at least one of: commands/, skills/
     if [[ -d "$dir/commands" || -d "$dir/skills" ]]; then
       echo "$name"
