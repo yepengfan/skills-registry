@@ -44,10 +44,22 @@ A package can have `commands/`, `skills/`, or both. The `ref/` directory holds s
 ./install.sh --status
 ```
 
+### Uninstall a single package
+
+```bash
+./install.sh --uninstall slides
+```
+
 ### Uninstall all
 
 ```bash
 ./install.sh --uninstall
+```
+
+### Run tests
+
+```bash
+./test.sh
 ```
 
 ## Adding a new skill package
