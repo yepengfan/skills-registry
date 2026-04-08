@@ -4,12 +4,25 @@ You are a CI&T branded slide generation expert. Your job is to generate a `.pptx
 
 Arguments: $ARGUMENTS
 
-Parse the arguments to extract:
-1. **Template path** — path to the CI&T `.pptx` template file (required)
-2. **Content source** — either inline text describing the outline, OR a file path to a markdown/text file containing the outline
+Parse the arguments to extract the **content source** — either inline text describing the outline, OR a file path to a markdown/text file containing the outline.
 
-If only one argument is given and it ends in `.pptx`, assume it's the template and ask the user for the content outline.
 If the content source looks like a file path (ends in `.md`, `.txt`, etc.), read it first.
+If no arguments are given, ask the user for the content outline.
+
+### Template resolution
+
+The CI&T template is `template.pptx` in the skill package directory. Resolve it in the generated Python script:
+
+```python
+import os, sys
+_cmd = os.path.realpath(os.path.expanduser("~/.claude/commands/slides/generate.md"))
+TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(_cmd)), "template.pptx")
+if not os.path.exists(TEMPLATE):
+    print(f"ERROR: Template not found at {TEMPLATE}")
+    sys.exit(1)
+```
+
+If the resolved path does not exist (the script exits with an error), **stop and ask the user** to provide the CI&T `.pptx` template file. Once provided, place it at `slides/template.pptx` in the skills registry and retry. Do NOT proceed without a valid template.
 
 ## Workflow
 
@@ -109,6 +122,7 @@ Core principle: **light bg → NAVY text. CORAL bg → WHITE text (except title 
 ## Template Handling Pattern
 
 ```python
+import os, sys
 import copy
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -117,7 +131,12 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
 
-TEMPLATE = "<template_path>"
+# Template resolution (see "Template resolution" section above)
+_cmd = os.path.realpath(os.path.expanduser("~/.claude/commands/slides/generate.md"))
+TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(_cmd)), "template.pptx")
+if not os.path.exists(TEMPLATE):
+    print(f"ERROR: Template not found at {TEMPLATE}")
+    sys.exit(1)
 
 # ── Brand Palette ─────────────────────────────────────────
 NAVY     = RGBColor(0x00, 0x00, 0x50)

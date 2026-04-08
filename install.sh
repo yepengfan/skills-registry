@@ -11,29 +11,56 @@ red='\033[0;31m'
 reset='\033[0m'
 
 usage() {
-  echo "Usage: $0 [--uninstall | --status | <skill-name>]"
+  echo "Usage: $0 [--uninstall [name] | --status | <skill-name>]"
   echo ""
-  echo "  (no args)        Install all skill packages"
-  echo "  <skill-name>     Install a single skill package"
-  echo "  --uninstall       Remove all symlinks managed by this registry"
-  echo "  --status          Show installed status of each skill"
+  echo "  (no args)            Install all skill packages"
+  echo "  <skill-name>         Install a single skill package"
+  echo "  --uninstall          Remove all symlinks managed by this registry"
+  echo "  --uninstall <name>   Remove symlinks for a single package"
+  echo "  --status             Show installed status of each skill"
   exit 1
+}
+
+# Validate package name: only allow alphanumeric, hyphens, and underscores
+validate_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo -e "${red}Invalid package name: $name${reset}"
+    return 1
+  fi
+}
+
+# Resolve a symlink to its absolute target path
+resolve_link() {
+  local link="$1"
+  if command -v realpath &>/dev/null; then
+    realpath "$link" 2>/dev/null || readlink "$link"
+  else
+    readlink "$link"
+  fi
 }
 
 # Find all skill packages (directories with commands/ or skills/ subdirs)
 list_packages() {
+  local _old_nullglob
+  _old_nullglob=$(shopt -p nullglob 2>/dev/null || true)
+  shopt -s nullglob
   for dir in "$REGISTRY_DIR"/*/; do
     local name
     name="$(basename "$dir")"
+    # Skip hidden directories
+    [[ "$name" == .* ]] && continue
     # A valid package has at least one of: commands/, skills/
     if [[ -d "$dir/commands" || -d "$dir/skills" ]]; then
       echo "$name"
     fi
   done | sort
+  eval "$_old_nullglob" 2>/dev/null || true
 }
 
 install_package() {
   local name="$1"
+  validate_name "$name" || return 1
   local pkg_dir="$REGISTRY_DIR/$name"
   local installed=0
 
@@ -91,13 +118,14 @@ install_package() {
 
 uninstall_package() {
   local name="$1"
+  validate_name "$name" || return 1
   local pkg_dir="$REGISTRY_DIR/$name"
 
   # Remove commands symlink (only if it points back to this registry)
   local cmd_dst="$CLAUDE_DIR/commands/$name"
   if [[ -L "$cmd_dst" ]]; then
     local actual
-    actual="$(readlink "$cmd_dst")"
+    actual="$(resolve_link "$cmd_dst")"
     if [[ "$actual" == "$pkg_dir/commands" ]]; then
       rm "$cmd_dst"
       echo -e "${yellow}  Removed commands: $name${reset}"
@@ -115,7 +143,7 @@ uninstall_package() {
       local skill_dst="$CLAUDE_DIR/skills/$fname"
       if [[ -L "$skill_dst" ]]; then
         local actual
-        actual="$(readlink "$skill_dst")"
+        actual="$(resolve_link "$skill_dst")"
         if [[ "$actual" == "$skill_file" ]]; then
           rm "$skill_dst"
           echo -e "${yellow}  Removed skill: $fname${reset}"
@@ -144,7 +172,7 @@ show_status() {
       local cmd_dst="$CLAUDE_DIR/commands/$name"
       if [[ -L "$cmd_dst" ]]; then
         local actual
-        actual="$(readlink "$cmd_dst")"
+        actual="$(resolve_link "$cmd_dst")"
         if [[ "$actual" == "$pkg_dir/commands" ]]; then
           status="commands:${green}linked${reset}"
         else
@@ -165,7 +193,14 @@ show_status() {
         local fname
         fname="$(basename "$skill_file")"
         local skill_dst="$CLAUDE_DIR/skills/$fname"
-        if [[ ! -L "$skill_dst" ]]; then
+        if [[ -L "$skill_dst" ]]; then
+          local actual
+          actual="$(resolve_link "$skill_dst")"
+          if [[ "$actual" != "$skill_file" ]]; then
+            all_linked=false
+            break
+          fi
+        else
           all_linked=false
           break
         fi
@@ -191,7 +226,11 @@ if [[ $# -eq 0 ]]; then
   done
   echo "Done."
 elif [[ "$1" == "--uninstall" ]]; then
-  uninstall_all
+  if [[ $# -ge 2 ]]; then
+    uninstall_package "$2"
+  else
+    uninstall_all
+  fi
 elif [[ "$1" == "--status" ]]; then
   show_status
 elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
