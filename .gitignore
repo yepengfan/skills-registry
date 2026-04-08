@@ -1,2 +1,3 @@
 .DS_Store
 *.pptx
+!skills/slides/template.pptx
