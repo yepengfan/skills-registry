@@ -21,10 +21,10 @@ usage() {
   exit 1
 }
 
-# Validate package name: reject path traversal and special characters
+# Validate package name: only allow alphanumeric, hyphens, and underscores
 validate_name() {
   local name="$1"
-  if [[ "$name" == */* || "$name" == ".." || "$name" == "." || "$name" == .* ]]; then
+  if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     echo -e "${red}Invalid package name: $name${reset}"
     return 1
   fi
