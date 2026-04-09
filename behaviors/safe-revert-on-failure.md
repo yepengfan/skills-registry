@@ -18,4 +18,4 @@ When a change fails verification:
 Never:
 - Commit code that fails verification "to fix later"
 - Stack fixes on top of a failing change
-- Retry the same approach more than once — if it fails twice, mark as unfixed
+- Retry the same approach — if it fails, mark as unfixed
