@@ -339,6 +339,28 @@ console.log('\n--- Update Command ---');
   rmrf(reg); rmrf(home);
 }
 
+// ── List Shows Behaviors ───────────────────────────────────
+
+console.log('\n--- List Shows Behaviors ---');
+{
+  const reg = tmpDir();
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'my-rule.md'),
+    '---\nname: my-rule\ndescription: A discipline rule\n---\n\nContent.\n');
+  fs.mkdirSync(path.join(reg, 'agents'), { recursive: true });
+  copyLib(reg);
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'list'], {
+      cwd: reg, encoding: 'utf8', timeout: 30000
+    });
+  } catch (e) { out = (e.stdout || '').toString(); }
+  check('list shows behaviors section', /behaviors/i.test(out));
+  check('list shows my-rule', out.includes('my-rule'));
+  check('list shows description', out.includes('A discipline rule'));
+  rmrf(reg);
+}
+
 // ── Summary ─────────────────────────────────────────────────
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
