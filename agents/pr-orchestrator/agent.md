@@ -45,7 +45,8 @@ Parse the user's input to extract:
 When dispatching the reviewer, resolve the final criteria list:
 1. Read the reviewer's frontmatter to get default `criteria:` list
 2. Apply any caller `--criteria` overrides
-3. Include the resolved criteria content in the reviewer's dispatch prompt
+3. For each criterion name, read its body from `{registry_root}/criteria/{name}.md`
+4. Include the resolved criteria content in the reviewer's dispatch prompt
 
 ## Workflow
 
