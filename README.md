@@ -51,25 +51,25 @@ agent-registry/
 ### Install everything
 
 ```bash
-npx agent-registry install
+npx @yepengfan/agent-registry install
 ```
 
 ### Install a single agent (+ its skill dependencies)
 
 ```bash
-npx agent-registry install --agent cit-deck-creator
+npx @yepengfan/agent-registry install --agent cit-deck-creator
 ```
 
 ### Install a single skill
 
 ```bash
-npx agent-registry install --skill slides
+npx @yepengfan/agent-registry install --skill slides
 ```
 
 ### Install an agent into a project
 
 ```bash
-npx agent-registry project devops ~/my-project
+npx @yepengfan/agent-registry project devops ~/my-project
 ```
 
 This copies the agent prompt into `~/my-project/.claude/CLAUDE.md` and the reference docs into `~/my-project/.claude/ref/devops/`.
@@ -77,7 +77,7 @@ This copies the agent prompt into `~/my-project/.claude/CLAUDE.md` and the refer
 ### Check status
 
 ```bash
-npx agent-registry status
+npx @yepengfan/agent-registry status
 ```
 
 Example output:
@@ -97,16 +97,16 @@ Skills:
 ### List available agents and skills
 
 ```bash
-npx agent-registry list
+npx @yepengfan/agent-registry list
 ```
 
 ### Uninstall
 
 ```bash
-npx agent-registry uninstall cit-deck-creator   # auto-detects type
-npx agent-registry uninstall --agent devops      # explicit
-npx agent-registry uninstall --skill slides      # explicit
-npx agent-registry uninstall --all               # remove all
+npx @yepengfan/agent-registry uninstall cit-deck-creator   # auto-detects type
+npx @yepengfan/agent-registry uninstall --agent devops      # explicit
+npx @yepengfan/agent-registry uninstall --skill slides      # explicit
+npx @yepengfan/agent-registry uninstall --all               # remove all
 ```
 
 ### Run tests
@@ -185,7 +185,7 @@ Orchestrator prompt goes here...
 1. Create `agents/<name>/` with an `agent.md` file
 2. Add `ref/` docs with domain knowledge
 3. List skill dependencies in frontmatter
-4. Run `npx agent-registry install --agent <name>` to install
+4. Run `npx @yepengfan/agent-registry install --agent <name>` to install
 
 ## Adding a New Orchestrator
 
@@ -193,10 +193,10 @@ Orchestrator prompt goes here...
 2. Set `type: orchestrator` in frontmatter
 3. List all sub-agents in `subagents:` (they must exist in the registry)
 4. Set `model: opus` if this orchestrator coordinates complex multi-step work
-5. Run `npx agent-registry install --agent <name>` to install (sub-agents install automatically)
+5. Run `npx @yepengfan/agent-registry install --agent <name>` to install (sub-agents install automatically)
 
 ## Adding a New Skill
 
 1. Create `skills/<name>/commands/` with `.md` command files
 2. Add a `README.md` describing the skill
-3. Run `npx agent-registry install --skill <name>` to install
+3. Run `npx @yepengfan/agent-registry install --skill <name>` to install
