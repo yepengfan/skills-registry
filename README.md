@@ -35,13 +35,13 @@ agent-registry/
 
 ## Available Agents
 
-| Agent | Type | Model | Description | Behaviors | Tools |
-|-------|------|-------|-------------|-----------|-------|
-| [cit-deck-creator](agents/cit-deck-creator/) | agent | sonnet | CI&T branded slide generation and auditing | — | python-pptx |
-| [devops](agents/devops/) | agent | sonnet | Infrastructure and deployment specialist | — | docker, kubectl, terraform |
-| [pr-reviewer](agents/pr-reviewer/) | agent | sonnet | Reviews PR diffs for code quality and posts GitHub comments | evidence-based-claims | gh |
-| [pr-fixer](agents/pr-fixer/) | agent | sonnet | Fixes must-fix review issues on PR branches | verification-gate, evidence-based-claims, no-blind-trust, safe-revert-on-failure, structured-pushback | gh |
-| [pr-orchestrator](agents/pr-orchestrator/) | orchestrator | opus | Orchestrates PR review and fix workflow | evidence-based-claims, independent-output-verification | gh |
+| Agent | Type | Model | Description | Skills | Behaviors | Tools |
+|-------|------|-------|-------------|--------|-----------|-------|
+| [cit-deck-creator](agents/cit-deck-creator/) | agent | sonnet | CI&T branded slide generation and auditing | slides | — | python-pptx |
+| [devops](agents/devops/) | agent | sonnet | Infrastructure and deployment specialist | — | — | docker, kubectl, terraform |
+| [pr-reviewer](agents/pr-reviewer/) | agent | sonnet | Reviews PR diffs for code quality and posts GitHub comments | — | evidence-based-claims | gh |
+| [pr-fixer](agents/pr-fixer/) | agent | sonnet | Fixes must-fix review issues on PR branches | — | verification-gate, evidence-based-claims, no-blind-trust, safe-revert-on-failure, structured-pushback | gh |
+| [pr-orchestrator](agents/pr-orchestrator/) | orchestrator | opus | Orchestrates PR review and fix workflow | — | evidence-based-claims, independent-output-verification | gh |
 
 ## Available Skills
 
