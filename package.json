@@ -1,5 +1,5 @@
 {
-  "name": "agent-registry",
+  "name": "@yepengfan/agent-registry",
   "version": "1.0.0",
   "description": "A unified registry for Claude Code agents and skills",
   "license": "MIT",
