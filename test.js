@@ -361,6 +361,102 @@ console.log('\n--- List Shows Behaviors ---');
   rmrf(reg);
 }
 
+// ── Criteria Injection ─────────────────────────────────────
+
+console.log('\n--- Criteria Injection ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  fs.mkdirSync(path.join(reg, 'criteria'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'criteria', 'test-criterion.md'),
+    '---\nname: test-criterion\ndescription: A test criterion\ngate: true\nmetric: test_metric\npass_when: "equals 0"\n---\n\n## Test Criterion\n\nCheck this thing.\n');
+  writeAgent(reg, 'criteria-agent',
+    'name: criteria-agent\ndescription: C\nversion: 1.0.0\nauthor: Me\ncriteria:\n  - test-criterion',
+    'Do your job.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'criteria-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'criteria-agent.md');
+  check('agent with criteria installed', fs.existsSync(dst));
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('has criteria start marker', content.includes('<!-- criteria:start -->'));
+    check('has criteria end marker', content.includes('<!-- criteria:end -->'));
+    check('criteria content injected', content.includes('## Test Criterion'));
+    check('criteria content includes rule', content.includes('Check this thing.'));
+    check('agent body still present', content.includes('Do your job.'));
+    check('criteria appear before body', content.indexOf('## Test Criterion') < content.indexOf('Do your job.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Missing Criteria Error ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'bad-criteria',
+    'name: bad-criteria\ndescription: B\nversion: 1.0.0\nauthor: Me\ncriteria:\n  - nonexistent');
+  copyLib(reg);
+  const result = (() => {
+    try {
+      execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'bad-criteria'], {
+        cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+      });
+      return { status: 0 };
+    } catch (e) {
+      return { status: 1, stderr: (e.stderr || '').toString(), stdout: (e.stdout || '').toString() };
+    }
+  })();
+  check('missing criteria rejects install', result.status !== 0);
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Agent Without Criteria Unchanged ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'no-criteria', 'name: no-criteria\ndescription: N\nversion: 1.0.0\nauthor: Me', 'Plain body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'no-criteria'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'no-criteria.md');
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('no criteria markers when none declared', !content.includes('<!-- criteria:'));
+    check('plain body present', content.includes('Plain body.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Both Behaviors and Criteria ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'test-behave.md'),
+    '---\nname: test-behave\ndescription: B\n---\n\n## Test Behavior\n\nBehavior content.\n');
+  fs.mkdirSync(path.join(reg, 'criteria'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'criteria', 'test-crit.md'),
+    '---\nname: test-crit\ndescription: C\ngate: true\nmetric: m\npass_when: "equals 0"\n---\n\n## Test Criteria\n\nCriteria content.\n');
+  writeAgent(reg, 'both-agent',
+    'name: both-agent\ndescription: X\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - test-behave\ncriteria:\n  - test-crit',
+    'Agent body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'both-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'both-agent.md');
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('has both behavior and criteria markers', content.includes('<!-- behaviors:start -->') && content.includes('<!-- criteria:start -->'));
+    check('behaviors before criteria', content.indexOf('<!-- behaviors:start -->') < content.indexOf('<!-- criteria:start -->'));
+    check('criteria before body', content.indexOf('<!-- criteria:end -->') < content.indexOf('Agent body.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
 // ── Summary ─────────────────────────────────────────────────
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
