@@ -16,7 +16,8 @@
     "lib/installer.js",
     "lib/discovery.js",
     "agents/",
-    "skills/"
+    "skills/",
+    "behaviors/"
   ],
   "keywords": [
     "claude",
