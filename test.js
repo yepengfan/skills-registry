@@ -189,6 +189,8 @@ console.log('\n--- Name Validation ---');
   check('rejects path traversal', r1.status !== 0 || /invalid/i.test(r1.stdout + r1.stderr));
   const r2 = run(['install', '--agent', '.hidden'], { HOME: home });
   check('rejects hidden dir name', r2.status !== 0 || /invalid/i.test(r2.stdout + r2.stderr));
+  const r3 = run(['install', '--agent', 'a'.repeat(129)], { HOME: home });
+  check('rejects name > 128 chars', r3.status !== 0 || /invalid/i.test(r3.stdout + r3.stderr));
   rmrf(home);
 }
 
