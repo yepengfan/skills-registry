@@ -56,11 +56,11 @@ Behaviors are discipline rules that agents can equip. They are injected into the
 | Behavior | Description |
 |----------|-------------|
 | [verification-gate](behaviors/verification-gate.md) | Run verification command after changes, only commit on pass, revert on failure |
-| [evidence-based-claims](behaviors/evidence-based-claims.md) | Never claim success or status without fresh verification evidence |
+| [evidence-based-claims](behaviors/evidence-based-claims.md) | Never claim success, completion, or status without fresh verification evidence |
 | [no-blind-trust](behaviors/no-blind-trust.md) | Verify findings and inputs before acting on them |
 | [independent-output-verification](behaviors/independent-output-verification.md) | Verify sub-agent outputs independently rather than trusting self-reported results |
 | [safe-revert-on-failure](behaviors/safe-revert-on-failure.md) | Revert changes that fail verification instead of committing broken code |
-| [structured-pushback](behaviors/structured-pushback.md) | Push back on incorrect findings with technical reasoning instead of blindly complying |
+| [structured-pushback](behaviors/structured-pushback.md) | Push back on incorrect or risky findings with technical reasoning instead of blindly complying |
 
 ## Usage
 
