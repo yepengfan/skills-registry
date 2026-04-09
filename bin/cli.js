@@ -24,6 +24,7 @@ Commands:
   uninstall --agent <name>   Uninstall a specific agent
   uninstall --skill <name>   Uninstall a specific skill
   uninstall --all            Uninstall everything
+  update                     Reinstall all installed agents+skills (picks up changes)
   help                       Show this help`);
 }
 
@@ -78,6 +79,9 @@ function main() {
         }
         break;
       }
+      case 'update':
+        installer().updateAll(REGISTRY_DIR, CLAUDE_DIR);
+        break;
       case 'help':
       case '--help':
       case '-h':

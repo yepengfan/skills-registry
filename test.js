@@ -306,6 +306,39 @@ console.log('\n--- Integration: Project Mode ---');
   rmrf(home); rmrf(proj);
 }
 
+// ── Update Command ─────────────────────────────────────────
+
+console.log('\n--- Update Command ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  // Create behavior + agent
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'rule-v1.md'),
+    '---\nname: rule-v1\ndescription: V1\n---\n\n## Rule V1\n\nVersion one.\n');
+  writeAgent(reg, 'up-agent',
+    'name: up-agent\ndescription: U\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - rule-v1',
+    'Agent body.');
+  copyLib(reg);
+  const cli = path.join(reg, 'bin', 'cli.js');
+  // Initial install
+  execFileSync(process.execPath, [cli, 'install', '--agent', 'up-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'up-agent.md');
+  check('initial install has v1 content', fs.readFileSync(dst, 'utf8').includes('Version one.'));
+  // Update the behavior file
+  fs.writeFileSync(path.join(reg, 'behaviors', 'rule-v1.md'),
+    '---\nname: rule-v1\ndescription: V1\n---\n\n## Rule V1\n\nVersion two updated.\n');
+  // Run update
+  execFileSync(process.execPath, [cli, 'update'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  check('after update has v2 content', fs.readFileSync(dst, 'utf8').includes('Version two updated.'));
+  check('after update v1 content gone', !fs.readFileSync(dst, 'utf8').includes('Version one.'));
+  rmrf(reg); rmrf(home);
+}
+
 // ── Summary ─────────────────────────────────────────────────
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
