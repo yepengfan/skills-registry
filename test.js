@@ -78,6 +78,75 @@ console.log('\n--- Agent Installation ---');
   rmrf(home);
 }
 
+// ── Behavior Injection ─────────────────────────────────────
+
+console.log('\n--- Behavior Injection ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'test-rule.md'),
+    '---\nname: test-rule\ndescription: A test rule\n---\n\n## Test Rule\n\nAlways verify before committing.\n');
+  writeAgent(reg, 'behave-agent',
+    'name: behave-agent\ndescription: B\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - test-rule',
+    'Do your job.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'behave-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'behave-agent.md');
+  check('agent with behaviors installed', fs.existsSync(dst));
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('has behaviors start marker', content.includes('<!-- behaviors:start -->'));
+    check('has behaviors end marker', content.includes('<!-- behaviors:end -->'));
+    check('behavior content injected', content.includes('## Test Rule'));
+    check('behavior content includes rule', content.includes('Always verify before committing.'));
+    check('agent body still present', content.includes('Do your job.'));
+    check('behaviors appear before body', content.indexOf('## Test Rule') < content.indexOf('Do your job.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Missing Behavior Error ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'bad-behave',
+    'name: bad-behave\ndescription: B\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - nonexistent');
+  copyLib(reg);
+  const result = (() => {
+    try {
+      execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'bad-behave'], {
+        cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+      });
+      return { status: 0 };
+    } catch (e) {
+      return { status: 1, stderr: (e.stderr || '').toString(), stdout: (e.stdout || '').toString() };
+    }
+  })();
+  check('missing behavior rejects install', result.status !== 0);
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Agent Without Behaviors Unchanged ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'plain-agent', 'name: plain-agent\ndescription: P\nversion: 1.0.0\nauthor: Me', 'Plain body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'plain-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'plain-agent.md');
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('no behaviors markers when none declared', !content.includes('<!-- behaviors:'));
+    check('plain body present', content.includes('Plain body.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
 // ── Skill Install ───────────────────────────────────────────
 
 console.log('\n--- Skill Installation ---');
