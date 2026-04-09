@@ -78,6 +78,75 @@ console.log('\n--- Agent Installation ---');
   rmrf(home);
 }
 
+// ── Behavior Injection ─────────────────────────────────────
+
+console.log('\n--- Behavior Injection ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'test-rule.md'),
+    '---\nname: test-rule\ndescription: A test rule\n---\n\n## Test Rule\n\nAlways verify before committing.\n');
+  writeAgent(reg, 'behave-agent',
+    'name: behave-agent\ndescription: B\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - test-rule',
+    'Do your job.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'behave-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'behave-agent.md');
+  check('agent with behaviors installed', fs.existsSync(dst));
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('has behaviors start marker', content.includes('<!-- behaviors:start -->'));
+    check('has behaviors end marker', content.includes('<!-- behaviors:end -->'));
+    check('behavior content injected', content.includes('## Test Rule'));
+    check('behavior content includes rule', content.includes('Always verify before committing.'));
+    check('agent body still present', content.includes('Do your job.'));
+    check('behaviors appear before body', content.indexOf('## Test Rule') < content.indexOf('Do your job.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Missing Behavior Error ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'bad-behave',
+    'name: bad-behave\ndescription: B\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - nonexistent');
+  copyLib(reg);
+  const result = (() => {
+    try {
+      execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'bad-behave'], {
+        cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+      });
+      return { status: 0 };
+    } catch (e) {
+      return { status: 1, stderr: (e.stderr || '').toString(), stdout: (e.stdout || '').toString() };
+    }
+  })();
+  check('missing behavior rejects install', result.status !== 0);
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Agent Without Behaviors Unchanged ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'plain-agent', 'name: plain-agent\ndescription: P\nversion: 1.0.0\nauthor: Me', 'Plain body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'plain-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'plain-agent.md');
+  if (fs.existsSync(dst)) {
+    const content = fs.readFileSync(dst, 'utf8');
+    check('no behaviors markers when none declared', !content.includes('<!-- behaviors:'));
+    check('plain body present', content.includes('Plain body.'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
 // ── Skill Install ───────────────────────────────────────────
 
 console.log('\n--- Skill Installation ---');
@@ -235,6 +304,61 @@ console.log('\n--- Integration: Project Mode ---');
   }
   check('ref docs copied', fs.existsSync(path.join(proj, '.claude', 'ref', 'devops', 'deployment-runbook.md')));
   rmrf(home); rmrf(proj);
+}
+
+// ── Update Command ─────────────────────────────────────────
+
+console.log('\n--- Update Command ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  // Create behavior + agent
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'rule-v1.md'),
+    '---\nname: rule-v1\ndescription: V1\n---\n\n## Rule V1\n\nVersion one.\n');
+  writeAgent(reg, 'up-agent',
+    'name: up-agent\ndescription: U\nversion: 1.0.0\nauthor: Me\nbehaviors:\n  - rule-v1',
+    'Agent body.');
+  copyLib(reg);
+  const cli = path.join(reg, 'bin', 'cli.js');
+  // Initial install
+  execFileSync(process.execPath, [cli, 'install', '--agent', 'up-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const dst = path.join(home, '.claude', 'commands', 'up-agent.md');
+  check('initial install has v1 content', fs.readFileSync(dst, 'utf8').includes('Version one.'));
+  // Update the behavior file
+  fs.writeFileSync(path.join(reg, 'behaviors', 'rule-v1.md'),
+    '---\nname: rule-v1\ndescription: V1\n---\n\n## Rule V1\n\nVersion two updated.\n');
+  // Run update
+  execFileSync(process.execPath, [cli, 'update'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  check('after update has v2 content', fs.readFileSync(dst, 'utf8').includes('Version two updated.'));
+  check('after update v1 content gone', !fs.readFileSync(dst, 'utf8').includes('Version one.'));
+  rmrf(reg); rmrf(home);
+}
+
+// ── List Shows Behaviors ───────────────────────────────────
+
+console.log('\n--- List Shows Behaviors ---');
+{
+  const reg = tmpDir();
+  fs.mkdirSync(path.join(reg, 'behaviors'), { recursive: true });
+  fs.writeFileSync(path.join(reg, 'behaviors', 'my-rule.md'),
+    '---\nname: my-rule\ndescription: A discipline rule\n---\n\nContent.\n');
+  fs.mkdirSync(path.join(reg, 'agents'), { recursive: true });
+  copyLib(reg);
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'list'], {
+      cwd: reg, encoding: 'utf8', timeout: 30000
+    });
+  } catch (e) { out = (e.stdout || '').toString(); }
+  check('list shows behaviors section', /behaviors/i.test(out));
+  check('list shows my-rule', out.includes('my-rule'));
+  check('list shows description', out.includes('A discipline rule'));
+  rmrf(reg);
 }
 
 // ── Summary ─────────────────────────────────────────────────
