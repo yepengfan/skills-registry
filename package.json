@@ -1,6 +1,6 @@
 {
   "name": "@yepengfan/agent-registry",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "A unified registry for Claude Code agents and skills",
   "license": "MIT",
   "author": "Yepeng Fan",
@@ -19,6 +19,7 @@
     "lib/frontmatter.js",
     "lib/installer.js",
     "lib/discovery.js",
+    "lib/profiles.js",
     "agents/",
     "skills/",
     "behaviors/",
