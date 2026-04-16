@@ -13,17 +13,17 @@ UI implementation must match the linked Figma design specification.
 ### Prerequisites
 - Figma MCP server must be available in the session
 - Playwright MCP server should be available for rendered screenshot comparison
-- See Evaluation Workflow step 1 for specific fallback behavior when either is unavailable
+- See Evaluation Workflow step 2 for specific fallback behavior when either is unavailable
 
 ### Evaluation Workflow
 
-1. **Check prerequisites:** Figma MCP and Playwright MCP must be available in the session.
-   - If Figma MCP is missing: report `pass: false` with detail "Figma MCP not available"
-   - If Playwright MCP is missing: proceed with code-only verification but report `pass: false` with detail "Playwright MCP not available — rendered comparison not possible, manual visual QA recommended"
-
-2. **Read the Figma steering file** (`.sdd/steering/feature-*-figma.md`) or extract Figma URL from PR description for the file key and node IDs.
+1. **Check applicability:** Read the Figma steering file (`.sdd/steering/feature-*-figma.md`) or extract a Figma URL from the PR description.
 
    If no steering file exists AND no Figma URL is found in the PR description, report `pass: true` with detail: "No Figma design reference found — criterion not applicable for this PR."
+
+2. **Check prerequisites:** Figma MCP and Playwright MCP must be available in the session.
+   - If Figma MCP is missing: report `pass: false` with detail "Figma MCP not available"
+   - If Playwright MCP is missing: proceed with code-only verification but report `pass: false` with detail "Playwright MCP not available — rendered comparison not possible, manual visual QA recommended"
 
 3. **PRIMARY CHECK — Visual comparison (requires Playwright):**
    a. Navigate to each affected screen via Playwright (`browser_navigate`)
