@@ -79,7 +79,7 @@ You receive a PR number or URL. Use `gh` to fetch all context you need.
 
    Locate the extraction script: use the `Registry root` path from the orchestrator's `## Context` section (or run `agent-registry root` as fallback). Read `{registry_root}/scripts/figma-extract.js`, replace `__NODE_ID__` with the target node ID, and pass the script to `mcp__plugin_figma_figma__use_figma`.
 
-   e. For each affected screen, run the Figma element extraction and save the inventory as a JSON file.
+   e. **For each affected screen**, run the Figma element extraction and save the inventory as a JSON file (e.g., `/tmp/figma-inventory-<screen>.json`). If the PR affects multiple screens, run the extraction once per screen.
 
    **Phase 2 — DOM Element Inventory**
 
@@ -90,31 +90,34 @@ You receive a PR number or URL. Use `gh` to fetch all context you need.
    - Script execution: `mcp__playwright__browser_evaluate`
    - Screenshot: `mcp__playwright__browser_take_screenshot`
 
-   f. Navigate to each affected page URL on localhost via `mcp__playwright__browser_navigate`.
+   **Localhost URL resolution:** The steering context should include a localhost route per screen. If the steering context says `Localhost routes: UNKNOWN` (Figma URL from PR body, no steering file), attempt to infer the route from the PR's changed files (e.g., changes in `src/pages/settings/` suggests `/settings`). If the route cannot be determined, report `pass: false` with detail: `"Localhost route unknown — steering file with route mappings required for automated DOM extraction"`.
+
+   f. **For each affected screen**, navigate to its localhost URL via `mcp__playwright__browser_navigate`.
    g. Wait for content to render. Perform any required interactions (click, scroll).
-   h. Read `{registry_root}/scripts/dom-extract.js` (using the registry root from `## Context`), replace `__ROOT_SELECTOR__` with the target selector, and pass it to `mcp__playwright__browser_evaluate`. Save the inventory as a JSON file.
+   h. Read `{registry_root}/scripts/dom-extract.js` (using the registry root from `## Context`), replace `__ROOT_SELECTOR__` with the target selector, and pass it to `mcp__playwright__browser_evaluate`. Save the inventory (e.g., `/tmp/dom-inventory-<screen>.json`).
 
    **Phase 3+4 — Map, Diff, and Report**
 
-   Run the deterministic comparison script — do NOT implement the mapping/diffing algorithm yourself:
+   **For each screen**, run the deterministic comparison script — do NOT implement the mapping/diffing algorithm yourself:
    ```bash
-   REGISTRY_ROOT=$(agent-registry root)
-   node "$REGISTRY_ROOT/scripts/design-diff.js" figma-inventory.json dom-inventory.json
+   node "$REGISTRY_ROOT/scripts/design-diff.js" /tmp/figma-inventory-<screen>.json /tmp/dom-inventory-<screen>.json || true
    ```
 
-   The script codifies the mapping cascade, tolerance thresholds, color normalization, font weight mapping, and fix hint generation. It outputs JSON conforming to the `figma-design-match` output contract. Exit code 0 = pass, 1 = fail.
+   **Important:** The script exits with code 1 when mismatches are found. This is NOT an error — use `|| true` to prevent bash from treating it as a failure. Always parse the stdout JSON regardless of exit code. Only treat it as an error if stdout is empty or not valid JSON.
 
-   i. Parse the script's JSON output.
+   The script codifies the mapping cascade, tolerance thresholds, color normalization, font weight mapping, and fix hint generation. It outputs JSON conforming to the `figma-design-match` output contract.
+
+   i. Parse the script's JSON output. If multiple screens, merge the results (sum mismatch counts, concatenate mismatch arrays).
 
    j. **Map each mismatch to a source file and line.** The script outputs `figma_element` and `dom_element` identifiers (e.g., "Button container", `div[data-testid='...']`), but issues need `file` and `line`. For each mismatch:
       - Use the `dom_element` identifier (tag, testId, text content) to search the PR's changed files for the component that renders it
       - Check the `fix_hint` — it often names a CSS class or DS token that can be grepped in the codebase
       - If the element maps to a specific component file, use that file and the line where the relevant style/class is applied
-      - If the exact line can't be determined, use the component file's top-level element (line 1) and note "exact line unknown" in the message
+      - If the exact source location can't be determined, include the mismatch with `file` set to the most likely component file and add `"location_confidence": "low"` to the issue. Include the `dom_element` identifier and `fix_hint` so the fixer can search for the right location using `grep`
 
    k. For each mismatch, classify severity per the Design Severity rules below.
 
-   k. Add all design mismatches to your issues array with `"category": "design"`. Each design issue MUST include the structured mismatch data from the script output:
+   l. Add all design mismatches to your issues array with `"category": "design"`. Each design issue MUST include the structured mismatch data from the script output:
       ```json
       {
         "severity": "must-fix",
@@ -128,7 +131,7 @@ You receive a PR number or URL. Use `gh` to fetch all context you need.
       }
       ```
 
-   l. Include the full `inventory` and `mismatches` array in the `figma-design-match` criteria_results entry per the output contract in the criterion definition.
+   m. Include the full `inventory` and `mismatches` array in the `figma-design-match` criteria_results entry per the output contract in the criterion definition.
 
    **When Playwright Can't Access the Page:**
 

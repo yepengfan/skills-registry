@@ -109,21 +109,37 @@ Verify the PR exists and is open.
 
 ### Step 2b: Pre-read Figma Steering Context
 
-Before entering the review loop, check for Figma steering files and pre-read their content:
+Before entering the review loop, check for Figma design references and pre-read their content:
 
-1. List `.sdd/steering/` in the repo and find any file matching `*figma*` (case-insensitive):
+1. **Check for steering files:** List `.sdd/steering/` and find any file matching `*figma*` (case-insensitive):
    ```bash
    ls .sdd/steering/ 2>/dev/null | grep -i figma
    ```
-2. If found, read the file contents (file key, node IDs, screen details, Playwright steps)
-3. When dispatching the reviewer, include the full steering file content in the prompt under a `## Figma Steering Context` section
-4. This prevents the reviewer from needing to discover the file itself — eliminating glob/case-sensitivity failures
 
-If no steering file is found and no Figma URL exists in the PR description body, include:
-```
-## Figma Steering Context
-No Figma design reference found — figma-design-match criterion is not applicable.
-```
+2. **Check PR body for Figma URL:** Parse the PR description body (from Step 2) for a Figma URL matching `figma.com/design/:fileKey/:fileName?node-id=:nodeId`. Extract `fileKey` and `nodeId` if found.
+
+3. **Build the Figma Steering Context** based on what was found:
+
+   **Case A — Steering file found:** Read the file contents (file key, node IDs, localhost routes per screen, Playwright steps). Include the full file content in the dispatch prompt. This is the ideal case — the reviewer has everything it needs.
+
+   **Case B — No steering file, but Figma URL in PR body:** Extract `fileKey` and `nodeId` from the URL. Include them in the context, but note that localhost routes are unknown:
+   ```
+   ## Figma Steering Context
+   Source: PR description Figma URL
+   File key: <fileKey>
+   Node ID: <nodeId>
+   Localhost routes: UNKNOWN — no steering file with route mappings.
+   The reviewer must infer the localhost URL from changed files, or report
+   that automated DOM extraction requires a steering file with routes.
+   ```
+
+   **Case C — No steering file AND no Figma URL:** Include:
+   ```
+   ## Figma Steering Context
+   No Figma design reference found — figma-design-match criterion is not applicable.
+   ```
+
+4. This prevents the reviewer from needing to discover files or parse URLs itself — eliminating discovery failures.
 
 ### Step 2c: Pre-verify MCP Tool Availability
 
