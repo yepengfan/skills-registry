@@ -15,7 +15,7 @@ behaviors:
   - evidence-based-claims
   - independent-output-verification
 interface:
-  input: PR number or URL. Optional --rounds N flag (default 3).
+  input: PR number or URL (auto-detects current branch PR if omitted). Optional --rounds N flag (default 3).
   output: Review comments posted to GitHub, must-fix issues fixed, final summary comment posted after N consecutive clean runs.
 ---
 
@@ -38,7 +38,11 @@ To load sub-agent prompts:
 ## Input Parsing
 
 Parse the user's input to extract:
-- **PR identifier**: A number (e.g., `123`) or full URL
+- **PR identifier**: A number (e.g., `123`) or full URL. **If no PR is specified**, auto-detect by running:
+  ```bash
+  gh pr view --json number,headRefName --jq '.number'
+  ```
+  This finds the open PR for the current branch. If no PR exists, report the error and exit.
 - **Flags**: `--rounds N` sets required consecutive clean runs (default: 3)
 - **Criteria overrides**: `--criteria +name` (add), `--criteria -name` (remove), `--criteria name1,name2` (replace)
 - **Task type**: Automatically detected from PR branch name and title (no flag needed)
