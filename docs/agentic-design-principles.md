@@ -56,17 +56,27 @@ Verification failure must trigger a recovery path, not just a report.
 
 **Rationale:** The first fixer failed silently. The orchestrator caught it via `git log` but had no automatic retry.
 
-## 6. Prefer General-Purpose Dispatch for Write Operations
+## 6. All Agents Dispatched via subagent_type
 
-Always dispatch via `subagent_type` first — agents need their scope constraints. If verification fails (writes didn't persist), retry as general-purpose with the agent definition inlined.
+Every defined agent MUST be dispatched via `subagent_type`. This loads the agent's scope constraints, tools, skills, behaviors, and guidelines from its definition. General-purpose dispatch (no `subagent_type`) is only a fallback for installation gaps — never the default.
 
 **Rules:**
-- Always try `subagent_type` first — it loads the agent's scope constraints, fix guidelines, and behavioral rules
+- Always dispatch via `subagent_type` — agents need their scope constraints to operate safely
+- Agent definitions must be self-contained: all tools, skills, behaviors, criteria, and reference docs declared in frontmatter and body
+- If an agent needs context at runtime (file list, criteria text, steering content), the caller injects it via the prompt — but the agent's workflow, constraints, and reading protocol live in the definition
 - After write operations (file edits, git commits), verify persistence via `git log` and file inspection
-- If verification fails, re-dispatch as general-purpose agent with the agent body inlined as fallback
+- If verification fails (writes didn't persist due to sandbox), retry as general-purpose agent with the agent body inlined as fallback
 - If fallback also fails, mark as unfixed
 
-**Rationale:** `subagent_type` provides scope constraints that prevent agents from overstepping. General-purpose dispatch loses those constraints but guarantees file persistence. The try-then-fallback pattern gives you both safety and reliability.
+**Agent definition completeness checklist:**
+- `tools:` — every MCP tool the agent needs
+- `skills:` — every skill the agent invokes
+- `behaviors:` — every behavioral constraint
+- `criteria:` — every criterion the agent evaluates
+- `interface:` — input/output contract
+- Body: workflow steps, reading protocol, severity rules, output format
+
+**Rationale:** `subagent_type` provides scope constraints that prevent agents from overstepping. An agent without constraints is a liability — it can read anything, change anything, and produce inconsistent results. General-purpose dispatch loses all constraints and should only be used as a persistence fallback, not a regular dispatch pattern.
 
 ## 7. Deterministic Scripts Over LLM Judgment
 
