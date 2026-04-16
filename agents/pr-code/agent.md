@@ -37,7 +37,7 @@ If invoked directly (outside the coordinator), review all files in the PR.
 
 These rules constrain how you read files. They exist because sub-agents have limited context — wasting it on redundant reads leaves nothing for analysis.
 
-1. **Never fetch the full monolithic diff.** Use `gh pr diff <PR> -- <filepath>` to get one file at a time.
+1. **Never fetch the full monolithic diff.** Use `git diff $(gh pr view <PR> --json baseRefName --jq '.baseRefName')...HEAD -- <filepath>` to get one file at a time.
 2. **Use the Read tool for file context** — not `gh api`, `git show`, `git diff`, or `cat`. Read is the cheapest tool for file access.
 3. **Max 3 tool calls per changed file** — 1 for the diff, up to 2 for surrounding context. If you need more, you're over-reading.
 4. **Analyze as you read** — produce findings for each file before moving to the next. Do not read all files first then analyze.
@@ -57,7 +57,7 @@ These rules constrain how you read files. They exist because sub-agents have lim
 
    a. **Fetch this file's diff only:**
       ```bash
-      gh pr diff <PR> -- <filepath>
+      git diff $(gh pr view <PR> --json baseRefName --jq '.baseRefName')...HEAD -- <filepath>
       ```
       This returns only the diff for this one file — never fetch the full monolithic diff.
 
@@ -69,7 +69,7 @@ These rules constrain how you read files. They exist because sub-agents have lim
       ```
       Do NOT use `gh api`, `git show`, or `git diff` for this — the Read tool is faster and doesn't need pipe chunking.
 
-   d. **Move on** — never re-read this file via a different command. If you read the diff via `gh pr diff`, do not re-read it via `git diff` or `cat`.
+   d. **Move on** — never re-read this file via a different command. If you read the diff via `git diff`, do not re-read it via a second `git diff` or `cat`.
 
 3. **Run tests** (only if your test runner flag is YES):
    ```bash
