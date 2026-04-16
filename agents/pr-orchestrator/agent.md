@@ -122,6 +122,11 @@ This enables the reviewer's severity escalation rule for persistent suggestions.
 
 **Loop:** (repeat until `consecutive_clean >= required_clean`)
 
+**Environmental Blockers:** If the fixer reports issues as `unfixed` with reasons that are environmental (e.g., "MCP server not available", "cannot access page", "auth required"), track these as `environment_blocked` items. In subsequent rounds:
+- Do NOT dispatch the fixer for environment_blocked issues — they cannot be fixed by code changes
+- Report them in the round summary as "blocked by environment"
+- If all must-fix issues in a round are environment_blocked, treat the round as clean for the purposes of the consecutive clean counter (the code itself has no fixable issues)
+
 If `round >= max_rounds`:
 - Post a summary comment reporting that the maximum round limit was reached
 - Report all unresolved issues from the last round
@@ -176,7 +181,7 @@ Include:
 - `gh auth` fails → report error, exit (no sub-agent spawn)
 - PR not found / closed → report and exit
 - Reviewer finds no issues → increment consecutive_clean, continue loop or exit if target reached
-- Fixer can't fix an issue → report as unfixed in summary
+- Fixer can't fix an issue → report as unfixed; if environmental (MCP unavailable, auth, no URL), track as environment_blocked and skip fixer in future rounds
 - Sub-agent timeout → report partial results
 
 ## Rules
