@@ -15,6 +15,7 @@
     "node": ">=18"
   },
   "files": [
+    "README.md",
     "bin/",
     "lib/frontmatter.js",
     "lib/installer.js",
