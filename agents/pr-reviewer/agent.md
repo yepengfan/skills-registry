@@ -47,11 +47,10 @@ You receive a PR number or URL. Use `gh` to fetch all context you need.
 
    **Prerequisite:** The frontend dev server must be running locally. Do not start or stop it yourself.
 
-   a. Check if the repo has SDD steering files:
-      ```bash
-      ls .sdd/steering/feature-*-figma.md 2>/dev/null
-      ```
-      If no files found, skip this step entirely.
+   a. Check if Figma design references exist:
+      - Check for SDD steering files: `ls .sdd/steering/feature-*-figma.md 2>/dev/null`
+      - Check the PR description body for a Figma URL (e.g., `figma.com/design/...`)
+      If neither steering files nor a Figma URL is found, skip this step entirely.
 
    b. For each steering file found, read it to extract:
       - Figma file key and node IDs per screen
