@@ -58,14 +58,15 @@ Verification failure must trigger a recovery path, not just a report.
 
 ## 6. Prefer General-Purpose Dispatch for Write Operations
 
-When an agent needs to edit files, commit, or push, dispatch as a general-purpose agent (no `subagent_type`). Reserve `subagent_type` for read-only analysis.
+Always dispatch via `subagent_type` first — agents need their scope constraints. If verification fails (writes didn't persist), retry as general-purpose with the agent definition inlined.
 
 **Rules:**
-- Fixer agents: always dispatch as general-purpose
-- Code review agents: `subagent_type` is fine (read-only + GH API comments)
-- Design review agents: `subagent_type` is fine (read-only + GH API comments)
+- Always try `subagent_type` first — it loads the agent's scope constraints, fix guidelines, and behavioral rules
+- After write operations (file edits, git commits), verify persistence via `git log` and file inspection
+- If verification fails, re-dispatch as general-purpose agent with the agent body inlined as fallback
+- If fallback also fails, mark as unfixed
 
-**Rationale:** General-purpose agents' file operations persist reliably. Named sub-agents may run in sandboxed contexts where writes don't persist.
+**Rationale:** `subagent_type` provides scope constraints that prevent agents from overstepping. General-purpose dispatch loses those constraints but guarantees file persistence. The try-then-fallback pattern gives you both safety and reliability.
 
 ## 7. Deterministic Scripts Over LLM Judgment
 
@@ -140,7 +141,7 @@ interface:
 | 3. Reading Protocol | No file reading | Diff stat only | Max 3 calls/file | Scripts do extraction | Issue list + targets |
 | 4. Verify Don't Trust | Verifies all | Verifies JSON | N/A (leaf) | N/A (leaf) | N/A (leaf) |
 | 5. Recover on Failure | Retry fixer | Report failed batches | N/A | N/A | N/A |
-| 6. GP for writes | N/A | N/A | GH API only | GH API only | **General-purpose** |
+| 6. Scoped then fallback | N/A | N/A | subagent_type | subagent_type | subagent_type → verify → GP fallback |
 | 7. Scripts over LLM | N/A | N/A | N/A | design-diff.js | N/A |
 | 8. Three layers | Decides | Dispatches | Executes | Executes | Executes |
 | 9. Stateless | Owns state | Stateless | Stateless | Stateless | Stateless |
