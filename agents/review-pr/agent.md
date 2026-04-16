@@ -204,10 +204,18 @@ If `round >= max_rounds`:
    - Reset `consecutive_clean = 0`
    - **Dispatch the Fixer:**
      - Extract only `must-fix` issues
-     - Call `Agent(description: "PR #<number> Fix Round <round>", subagent_type: "pr-fix", prompt: <issue list as JSON>)`
-     - If `subagent_type` dispatch fails, fall back to reading the body of `{registry_root}/agents/pr-fix/agent.md` and passing it inline via the `prompt` parameter
+     - Read the body of `{registry_root}/agents/pr-fix/agent.md`
+     - Call `Agent(description: "PR #<number> Fix Round <round>", prompt: <pr-fix agent body> + <issue list as JSON>)`
+     - **Important:** Always dispatch the fixer as a general-purpose agent (no `subagent_type`). Named sub-agent dispatch may sandbox file operations, causing commits to not persist. See design principle #6.
      - Wait for completion and capture the JSON response
-   - **Verify fixes independently** (run test suite, check git log)
+   - **Verify fixes (Principle #4 + #5):**
+     1. Run `git log --oneline -1` — confirm a new commit exists after the fixer ran
+     2. For each fixed issue, grep the target file to confirm the fix was applied
+     3. Run the test suite to confirm no regressions
+     4. **If verification fails** (commit missing or fix not applied):
+        - Log: "Fixer commit did not persist — retrying as general-purpose agent"
+        - Re-dispatch the fixer with the same prompt
+        - If retry also fails, mark issues as `unfixed` with reason: "fixer commit did not persist after retry"
    - Post a round summary comment on the PR
    - Loop back to step 1 (dispatch reviewer to re-review)
 
