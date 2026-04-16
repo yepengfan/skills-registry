@@ -12,6 +12,8 @@ subagents:
   - pr-fixer
 tools:
   - gh
+  - figma_mcp
+  - playwright
 behaviors:
   - evidence-based-claims
   - independent-output-verification
@@ -120,6 +122,18 @@ If no steering file is found and no Figma URL exists in the PR description body,
 No Figma design reference found — figma-design-match criterion is not applicable.
 ```
 
+### Step 2c: Pre-verify MCP Tool Availability
+
+Before entering the review loop, probe each required MCP to verify it is available. This eliminates the reviewer's need to discover tools by checking config files.
+
+1. **Probe Playwright:** Call `mcp__playwright__browser_snapshot`. If it returns (even "no page open" or an accessibility tree), set `playwright_available = true`. If it errors, set `playwright_available = false`.
+
+2. **Probe Figma:** Call `mcp__plugin_figma_figma__whoami`. If it returns user info, set `figma_available = true`. If it errors, set `figma_available = false`.
+
+3. **Read tool reference:** Read `{registry_root}/ref/mcp-tools.md` for the full list of tool names and invocation examples.
+
+4. When dispatching the reviewer, include the verified status and tool names under a `## Available Tools` section (see Step 3 dispatch template below).
+
 ### Step 3: Review-Fix Loop
 
 The orchestrator runs a review-fix loop until the required number of consecutive clean runs is reached (default: 3, configurable via `--rounds N`).
@@ -151,10 +165,30 @@ If `round >= max_rounds`:
 - Exit the loop
 
 1. **Dispatch the Reviewer**
-   - Call `Agent(description: "PR #<number> Review Round <round>", subagent_type: "pr-reviewer", prompt: "Review PR #<number> in this repository." + <resolved criteria context> + <Figma steering context from Step 2b> + <prior round suggestions if any>)`
+   - Call `Agent(description: "PR #<number> Review Round <round>", subagent_type: "pr-reviewer", prompt: "Review PR #<number> in this repository." + <resolved criteria context> + <Figma steering context from Step 2b> + <Available Tools from Step 2c> + <prior round suggestions if any>)`
    - If `subagent_type` dispatch fails (agent definition not found), fall back to reading the body of `{registry_root}/agents/pr-reviewer/agent.md` and passing it inline via the `prompt` parameter
    - Wait for completion and capture the JSON response
    - Increment `round`
+
+   **Available Tools template** (inject into reviewer prompt based on Step 2c results):
+   ```
+   ## Available Tools (pre-verified by orchestrator)
+
+   ### Playwright: <AVAILABLE|NOT AVAILABLE>
+   Use these tool calls directly — do NOT check config files for availability:
+   - mcp__playwright__browser_resize({width: 1280, height: 800})
+   - mcp__playwright__browser_navigate({url: "<localhost-url>"})
+   - mcp__playwright__browser_snapshot()
+   - mcp__playwright__browser_evaluate({function: "() => { ... }"})
+   - mcp__playwright__browser_take_screenshot()
+
+   ### Figma: <AVAILABLE|NOT AVAILABLE>
+   Use these tool calls directly — do NOT check config files for availability:
+   - mcp__plugin_figma_figma__get_design_context({fileKey: "<key>", nodeId: "<id>"})
+   - mcp__plugin_figma_figma__use_figma({fileKey: "<key>", code: "<script>", description: "<desc>"})
+   - mcp__plugin_figma_figma__get_variable_defs({fileKey: "<key>", nodeId: "<id>"})
+   - mcp__plugin_figma_figma__get_screenshot({fileKey: "<key>", nodeId: "<id>"})
+   ```
 
 2. **Evaluate Results**
    - Parse the reviewer's JSON output. Check `criteria_results`.
