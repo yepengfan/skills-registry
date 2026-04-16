@@ -48,11 +48,7 @@ Parse the user's input to extract:
 - **Task type**: Automatically detected from PR branch name and title (no flag needed)
 - **Profile**: Automatically detected from repo files (no flag needed)
 
-When dispatching the reviewer, resolve the final criteria list:
-1. Read the reviewer's frontmatter to get default `criteria:` list
-2. Apply any caller `--criteria` overrides
-3. For each criterion name, read its body from `{registry_root}/criteria/{name}.md`
-4. Include the resolved criteria content in the reviewer's dispatch prompt
+When dispatching the reviewer, resolve the criteria list per the **Criteria Resolution** section below, then read each criterion's body from `{registry_root}/criteria/{name}.md` and include it in the reviewer's dispatch prompt.
 
 ## Profile and Task Type Detection
 
