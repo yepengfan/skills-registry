@@ -579,6 +579,104 @@ console.log('\n--- List Shows Profiles ---');
   rmrf(reg);
 }
 
+// ── Agent Definition Install (.claude/agents/) ─────────────
+
+console.log('\n--- Agent Definition With Color ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'colored-agent',
+    'name: colored-agent\ndescription: A colored agent\nversion: 1.0.0\nauthor: Me\nmodel: sonnet\ncolor: blue\ntools:\n  - gh\n  - playwright',
+    'Colored agent body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'colored-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const cmdDst = path.join(home, '.claude', 'commands', 'colored-agent.md');
+  const agentDst = path.join(home, '.claude', 'agents', 'colored-agent.md');
+  check('command file created', fs.existsSync(cmdDst));
+  check('agent definition file created', fs.existsSync(agentDst));
+  if (fs.existsSync(agentDst)) {
+    const content = fs.readFileSync(agentDst, 'utf8');
+    check('agent def has color', content.includes('color: blue'));
+    check('agent def has name', content.includes('name: colored-agent'));
+    check('agent def has description', content.includes('description: A colored agent'));
+    check('agent def has model', content.includes('model: sonnet'));
+    check('agent def has tools as csv', content.includes('tools: gh, playwright'));
+    check('agent def has body', content.includes('Colored agent body.'));
+    check('agent def has registry path', content.includes('agent-registry-path:'));
+  }
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Agent Without Color Skips Agent Definition ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'plain-agent',
+    'name: plain-agent\ndescription: No color\nversion: 1.0.0\nauthor: Me',
+    'Plain body.');
+  copyLib(reg);
+  execFileSync(process.execPath, [path.join(reg, 'bin', 'cli.js'), 'install', '--agent', 'plain-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const cmdDst = path.join(home, '.claude', 'commands', 'plain-agent.md');
+  const agentDst = path.join(home, '.claude', 'agents', 'plain-agent.md');
+  check('command file created', fs.existsSync(cmdDst));
+  check('no agent definition when no color', !fs.existsSync(agentDst));
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- Uninstall Removes Agent Definition ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'rm-colored',
+    'name: rm-colored\ndescription: Remove me\nversion: 1.0.0\nauthor: Me\ncolor: purple',
+    'Body.');
+  copyLib(reg);
+  const cli = path.join(reg, 'bin', 'cli.js');
+  execFileSync(process.execPath, [cli, 'install', '--agent', 'rm-colored'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  const cmdDst = path.join(home, '.claude', 'commands', 'rm-colored.md');
+  const agentDst = path.join(home, '.claude', 'agents', 'rm-colored.md');
+  check('both files exist before uninstall', fs.existsSync(cmdDst) && fs.existsSync(agentDst));
+  execFileSync(process.execPath, [cli, 'uninstall', '--agent', 'rm-colored'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  check('command file removed', !fs.existsSync(cmdDst));
+  check('agent definition removed', !fs.existsSync(agentDst));
+  rmrf(reg); rmrf(home);
+}
+
+console.log('\n--- isAgentInstalled Checks Both Directories ---');
+{
+  const reg = tmpDir();
+  const home = tmpDir();
+  writeAgent(reg, 'dual-agent',
+    'name: dual-agent\ndescription: Dual\nversion: 1.0.0\nauthor: Me\ncolor: green',
+    'Body.');
+  copyLib(reg);
+  const cli = path.join(reg, 'bin', 'cli.js');
+  execFileSync(process.execPath, [cli, 'install', '--agent', 'dual-agent'], {
+    cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+  });
+  // Remove only the commands file, leaving the agents file
+  const cmdDst = path.join(home, '.claude', 'commands', 'dual-agent.md');
+  fs.unlinkSync(cmdDst);
+  check('command file removed', !fs.existsSync(cmdDst));
+  // Status should still show as installed via agents dir
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [cli, 'status'], {
+      cwd: reg, env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 30000
+    });
+  } catch (e) { out = (e.stdout || '').toString(); }
+  check('still detected as installed via agents dir', out.includes('installed') && out.includes('dual-agent'));
+  rmrf(reg); rmrf(home);
+}
+
 // ── Summary ─────────────────────────────────────────────────
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);

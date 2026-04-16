@@ -5,6 +5,7 @@ version: 1.0.0
 author: Yepeng Fan
 type: agent
 model: sonnet
+color: orange
 tags: [pr-workflow, code-quality]
 tools:
   - gh

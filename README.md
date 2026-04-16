@@ -42,13 +42,13 @@ agent-registry/
 
 ## Available Agents
 
-| Agent | Type | Model | Description | Skills | Criteria | Behaviors | Tools |
-|-------|------|-------|-------------|--------|----------|-----------|-------|
-| [cit-deck-creator](agents/cit-deck-creator/) | agent | — | CI&T branded slide generation and auditing expert | slides | — | — | python-pptx |
-| [devops](agents/devops/) | agent | — | Infrastructure and deployment specialist | — | — | — | docker, kubectl, terraform |
-| [pr-reviewer](agents/pr-reviewer/) | agent | sonnet | Reviews PR diffs for code quality and Figma design verification (two-pass: rendered screenshot + code) | — | zero-must-fix-issues, all-tests-pass | evidence-based-claims | gh, figma_mcp, playwright |
-| [pr-fixer](agents/pr-fixer/) | agent | sonnet | Fixes must-fix review issues on PR branches | — | — | verification-gate, evidence-based-claims, no-blind-trust, safe-revert-on-failure, structured-pushback | gh |
-| [pr-orchestrator](agents/pr-orchestrator/) | orchestrator | opus | Review-fix loop until N consecutive clean runs (default 3). Auto-detects current branch PR. `--rounds N` configurable. | — | — | evidence-based-claims, independent-output-verification | gh |
+| Agent | Type | Model | Color | Description | Skills | Criteria | Behaviors | Tools |
+|-------|------|-------|-------|-------------|--------|----------|-----------|-------|
+| [cit-deck-creator](agents/cit-deck-creator/) | agent | — | — | CI&T branded slide generation and auditing expert | slides | — | — | python-pptx |
+| [devops](agents/devops/) | agent | — | — | Infrastructure and deployment specialist | — | — | — | docker, kubectl, terraform |
+| [pr-reviewer](agents/pr-reviewer/) | agent | sonnet | blue | Reviews PR diffs for code quality and Figma design verification (two-pass: rendered screenshot + code) | — | zero-must-fix-issues, all-tests-pass | evidence-based-claims | gh, figma_mcp, playwright |
+| [pr-fixer](agents/pr-fixer/) | agent | sonnet | orange | Fixes must-fix review issues on PR branches | — | — | verification-gate, evidence-based-claims, no-blind-trust, safe-revert-on-failure, structured-pushback | gh |
+| [pr-orchestrator](agents/pr-orchestrator/) | orchestrator | opus | purple | Review-fix loop until N consecutive clean runs (default 3). Auto-detects current branch PR. `--rounds N` configurable. | — | — | evidence-based-claims, independent-output-verification | gh |
 
 ## Available Skills
 
@@ -182,6 +182,7 @@ version: 1.0.0
 author: Your Name
 type: agent
 model: sonnet
+color: blue
 tags: [category, tags]
 skills:
   - skill-name
@@ -205,6 +206,7 @@ Agent system prompt goes here...
 | author | yes | string | Creator/maintainer |
 | type | no | `agent` \| `orchestrator` | Defaults to `agent` |
 | model | no | `opus` \| `sonnet` \| `haiku` | Target Claude model tier |
+| color | no | string | Agent label color in Claude Code UI (see valid colors below) |
 | tags | no | string[] | Category tags |
 | skills | no | string[] | Skill dependencies (auto-installed) |
 | tools | no | string[] | External tools (warnings if missing) |
@@ -219,6 +221,7 @@ Agent system prompt goes here...
 - `version` is required (semver format recommended but not enforced at parse time)
 - `type` must be one of: `agent`, `orchestrator`
 - `model` must be one of: `opus`, `sonnet`, `haiku`
+- `color` must be one of: `red`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`, `cyan`
 - `behaviors` items must match `/^[a-zA-Z0-9_-]+$/` (file existence in `behaviors/` is verified at install time)
 - `criteria` items must match `/^[a-zA-Z0-9_-]+$/` (file existence in `criteria/` is verified at install time)
 - `subagents` is required (and must be non-empty) when `type: orchestrator`
@@ -234,6 +237,7 @@ version: 1.0.0
 author: Yepeng Fan
 type: orchestrator
 model: opus
+color: purple
 subagents:
   - pr-reviewer
   - pr-fixer
@@ -261,6 +265,14 @@ Orchestrator prompt goes here...
 3. List all sub-agents in `subagents:` (they must exist in the registry)
 4. Set `model: opus` if this orchestrator coordinates complex multi-step work
 5. Run `npx @yepengfan/agent-registry install --agent <name>` to install (sub-agents install automatically)
+
+## Colored Agent Labels
+
+When an agent has a `color` field in its frontmatter, the installer writes an additional agent definition file to `~/.claude/agents/<name>.md` alongside the usual command file. This enables Claude Code to display colored background labels when the agent is running.
+
+Orchestrators can dispatch sub-agents via `subagent_type` (e.g., `Agent(subagent_type: "pr-reviewer", ...)`), which loads the agent definition from `.claude/agents/` and shows the colored label in the UI.
+
+Agents without `color` are installed only as commands (existing behavior, unchanged).
 
 ## Adding a New Behavior
 
