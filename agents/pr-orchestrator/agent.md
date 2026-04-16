@@ -112,10 +112,10 @@ The orchestrator runs a review-fix loop until the required number of consecutive
 - `required_clean = N` (from `--rounds` flag, default 3)
 - `max_rounds = required_clean * 3` (safety cap — default 9)
 
-**Prior Round Context:** When dispatching the reviewer in any round after the first, include accumulated design suggestions from all prior rounds:
+**Prior Round Context:** When dispatching the reviewer in any round after the first, include accumulated suggestions (both code and design) from all prior rounds:
 ```
 ## Prior Round Suggestions
-These design suggestions have been flagged in prior rounds but not fixed:
+These suggestions have been flagged in prior rounds but not fixed:
 - [round N]: <suggestion description>
 ```
 This enables the reviewer's severity escalation rule for persistent suggestions.
@@ -125,7 +125,7 @@ This enables the reviewer's severity escalation rule for persistent suggestions.
 **Environmental Blockers:** If the fixer reports issues as `unfixed` with reasons that are environmental (e.g., "MCP server not available", "cannot access page", "auth required"), track these as `environment_blocked` items. In subsequent rounds:
 - Do NOT dispatch the fixer for environment_blocked issues — they cannot be fixed by code changes
 - Report them in the round summary as "blocked by environment"
-- If all must-fix issues in a round are environment_blocked (no fixable code issues remain), exit the loop early with a summary reporting that the PR has no code-level must-fix issues but has unresolved environmental blockers. Recommend manual verification for the blocked criteria before merge. Do NOT count environment_blocked rounds as clean — gate criteria failures cannot be bypassed.
+- If all must-fix issues in a round are environment_blocked (no fixable code issues remain), exit the loop early with a summary reporting that the PR has no code-level must-fix issues but has unresolved environmental blockers. Recommend manual verification for the blocked criteria before merge. Do NOT recommend merge — the PR should be blocked until environmental criteria are manually verified or the environment issue is resolved. Do NOT count environment_blocked rounds as clean — gate criteria failures cannot be bypassed.
 
 If `round >= max_rounds`:
 - Post a summary comment reporting that the maximum round limit was reached
