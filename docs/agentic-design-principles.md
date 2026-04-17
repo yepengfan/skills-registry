@@ -89,18 +89,21 @@ For reproducible operations (diffing, mapping, tolerance checking), use scripts.
 
 **Rationale:** If an LLM re-implemented diffing logic, results would be inconsistent across runs. Scripts are deterministic and testable.
 
-## 8. Three-Layer Separation
+## 8. Flat Dispatch — Depth-1 Only
+
+Claude Code limits agent dispatch to depth-1: sub-agents cannot spawn further sub-agents. All agent dispatches must happen directly from the orchestrator.
 
 ```
-Orchestrator (Opus)  — decides: loop control, gate evaluation, exit
-Coordinator (Sonnet) — dispatches: batch computation, parallel fan-out, result merge
-Agent (Sonnet)       — executes: focused work on bounded scope
+Orchestrator (Opus)  — decides + dispatches: loop control, batching, gate evaluation, exit
+Agent (Sonnet)       — executes: focused work on bounded scope, never dispatches
 ```
 
 **Rules:**
-- Orchestrators never read file content or diffs
-- Coordinators never make gate/exit decisions
-- Agents never dispatch other agents
+- Only the orchestrator dispatches agents — never nest orchestrators
+- Orchestrators may read lightweight data (diff stats, file lists) for batching decisions
+- Orchestrators must NOT read full file content or diffs — pre-fetch and pass to agents
+- Agents never dispatch other agents — if an agent needs the Agent tool, the architecture is wrong
+- Keep orchestrator logic thin: batching is simple math, merging is JSON concatenation
 
 **Rationale:** Mixing dispatch logic into the orchestrator bloats its context. Mixing decisions into agents makes them fragile.
 
@@ -144,18 +147,18 @@ interface:
 
 ## Principle Application Matrix
 
-| Principle | Orchestrator | Coordinator | Code Reviewer | Design Reviewer | Fixer |
-|---|:---:|:---:|:---:|:---:|:---:|
-| 1. Single Responsibility | Loop control | Batch + merge | Code quality | Design fidelity | Apply fixes |
-| 2. Bounded Work | N/A | Batches files | ≤500 diff lines | All screens | Only must-fix list |
-| 3. Reading Protocol | No file reading | Diff stat only | Max 3 calls/file | Scripts do extraction | Issue list + targets |
-| 4. Verify Don't Trust | Verifies all | Verifies JSON | N/A (leaf) | N/A (leaf) | N/A (leaf) |
-| 5. Recover on Failure | Retry fixer | Report failed batches | N/A | N/A | N/A |
-| 6. Scoped then fallback | N/A | N/A | subagent_type | subagent_type | subagent_type → verify → GP fallback |
-| 7. Scripts over LLM | N/A | N/A | N/A | design-diff.js | N/A |
-| 8. Three layers | Decides | Dispatches | Executes | Executes | Executes |
-| 9. Stateless | Owns state | Stateless | Stateless | Stateless | Stateless |
-| 10. I/O Contracts | Validates | Unified JSON | Issues JSON | Issues JSON | Fixed/unfixed JSON |
+| Principle | Orchestrator | Code Reviewer | Design Reviewer | Fixer |
+|---|:---:|:---:|:---:|:---:|
+| 1. Single Responsibility | Loop + batch + merge | Code quality | Design fidelity | Apply fixes |
+| 2. Bounded Work | Diff stat only | ≤500 diff lines | All screens | Only must-fix list |
+| 3. Reading Protocol | Pre-fetch diffs, pass to agents | Analyze provided diff | Scripts do extraction | Issue list + targets |
+| 4. Verify Don't Trust | Verifies all sub-agents | N/A (leaf) | N/A (leaf) | N/A (leaf) |
+| 5. Recover on Failure | Retry fixer dispatch | N/A | N/A | N/A |
+| 6. Scoped then fallback | Dispatches all | subagent_type | subagent_type | subagent_type → verify → GP fallback |
+| 7. Scripts over LLM | N/A | N/A | design-diff.js | N/A |
+| 8. Flat dispatch | Dispatches all agents | Never dispatches | Never dispatches | Never dispatches |
+| 9. Stateless | Owns state | Stateless | Stateless | Stateless |
+| 10. I/O Contracts | Validates outputs | Issues JSON | Issues JSON | Fixed/unfixed JSON |
 
 ---
 
