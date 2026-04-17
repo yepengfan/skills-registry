@@ -6,6 +6,14 @@ allowed-tools: Task, Bash, Read, Write
 
 # PR Review Loop
 
+## Known limitation: custom subagent tool access
+
+Due to a Claude Code issue affecting custom subagents in ~/.claude/agents/ (GitHub issue #12392), directly invoking pr-reviewer or pr-fixer via `subagent_type="pr-reviewer"` results in the subagent emitting fake tool-call XML without actually invoking tools.
+
+Workaround: invoke `subagent_type="general-purpose"` and inject the reviewer/fixer role via the prompt by cat-ing the agent definition file. This skill's Steps 2 and 6 follow this pattern.
+
+When the Claude Code bug is fixed, this workaround can be reversed.
+
 You are orchestrating a review-fix loop on a PR. Drive the loop faithfully. Do not skip steps. Do not substitute your own judgment for the deterministic scripts — they exist specifically to catch LLM judgment errors you can't self-detect.
 
 ## Before starting
@@ -45,31 +53,62 @@ Output goes to `./.pr-review-state/gates.json`. Read it to see the results. Do N
 
 ### 2. Invoke pr-reviewer subagent
 
-Use the Task tool with `subagent_type: "pr-reviewer"`. Construct the prompt as follows:
+Invoke the reviewer via the Task tool. Due to a known Claude Code issue where custom subagent types (pr-reviewer, pr-fixer, etc.) cannot actually invoke tools and instead emit fake `<function_calls>` XML as text, we must use `subagent_type: "general-purpose"` and inject the pr-reviewer role via the prompt.
 
-- Start with: "Review PR #{N}." where {N} is the PR number from `gh pr view`.
-- Include the PR diff: get via `gh pr diff` (or `git diff <base>..HEAD` if gh unavailable)
-- Include the gate results from step 1, wrapped clearly:
+Step 2a — Load the pr-reviewer role definition:
+
+```bash
+cat ~/.claude/agents/pr-reviewer.md
+```
+
+Step 2b — Construct the Task prompt. Include three parts in this exact order:
+
+1. Role preamble (literal text):
 
 ```
+You are operating as the pr-reviewer agent. Your system prompt is below. Follow it exactly, including tool usage discipline.
+--- BEGIN pr-reviewer SYSTEM PROMPT ---
+```
+
+2. The full contents of `~/.claude/agents/pr-reviewer.md` you read in Step 2a.
+
+3. Role postamble + task (literal text, with {N} replaced by actual round number, {PR_NUM} by PR number from `gh pr view --json number`):
+
+```
+--- END pr-reviewer SYSTEM PROMPT ---
+
+TASK:
+
+Review PR #{PR_NUM}.
+
+PR diff:
+<paste output of gh pr diff>
+
 DETERMINISTIC FACTS — do not reassess:
 - tests_pass: <value from gates.json>
 - lint_pass: <value from gates.json>
 - build_pass: <value from gates.json>
-```
-
-Tell the reviewer explicitly and imperatively to use the Write tool. The prompt should include:
 
 You have the Write tool. Use it to save your findings JSON to:
 .pr-review-state/findings_raw_round_{N}.json
 
 Do NOT return the JSON in your response. Do NOT emit <function_calls> XML or any tool-call-looking text. Actually invoke the Write tool through the tool interface.
 
-After Write succeeds, return only a one-line confirmation matching the format in your agent prompt.
+After Write succeeds, return only a one-line confirmation matching the format in your role definition (the pr-reviewer system prompt above).
+```
 
-The above text block is sent verbatim to pr-reviewer (with {N} replaced by actual round number). This language is redundant with pr-reviewer's agent.md prompt but the redundancy is intentional — reviewers sometimes slip back into "pure LLM mode" if not strongly reminded they're a tool-using agent.
+Step 2c — Invoke:
 
-The reviewer writes the JSON file itself using the Write tool and returns only a one-line confirmation. You do NOT need to capture and save the reviewer's response content — the file is already on disk. Verify the file exists before proceeding to Step 3.
+- `subagent_type`: `"general-purpose"` (NOT `"pr-reviewer"`)
+- `prompt`: the three-part string assembled above
+
+Step 2d — After the Task call returns, verify the file exists:
+
+```bash
+ls -la .pr-review-state/findings_raw_round_{N}.json
+```
+
+If the file doesn't exist, the subagent failed to invoke Write. Terminate the loop and report to user — do NOT proceed to Step 3.
 
 ### 3. Ground-verify every finding
 
@@ -127,14 +166,42 @@ jq '.findings | map(select(.severity == "must-fix"))' \
 
 If the filtered array is empty but `CONTINUE` was returned, something is off — go to step 7 anyway to record the round but don't invoke fixer.
 
-If non-empty, use the Task tool with `subagent_type: "pr-fixer"`. The prompt:
+If non-empty, invoke the fixer via the Task tool using the same general-purpose workaround as Step 2.
+
+Step 6a — Load the pr-fixer role definition:
+
+```bash
+cat ~/.claude/agents/pr-fixer.md
+```
+
+Step 6b — Construct the Task prompt with three parts:
+
+1. Role preamble (literal text):
 
 ```
+You are operating as the pr-fixer agent. Your system prompt is below. Follow it exactly, including tool usage discipline.
+--- BEGIN pr-fixer SYSTEM PROMPT ---
+```
+
+2. The full contents of `~/.claude/agents/pr-fixer.md` you read in Step 6a.
+
+3. Role postamble + task (literal text):
+
+```
+--- END pr-fixer SYSTEM PROMPT ---
+
+TASK:
+
 Fix the following verified findings. Each has been ground-verified against real code.
 After applying fixes, run tests/lint/build to verify, and commit to the current branch.
 
 <paste contents of fixer_input_round_N.json>
 ```
+
+Step 6c — Invoke:
+
+- `subagent_type`: `"general-purpose"` (NOT `"pr-fixer"`)
+- `prompt`: the three-part string assembled above
 
 Capture the fixer's status JSON and save to `./.pr-review-state/fixer_result_round_N.json`.
 
