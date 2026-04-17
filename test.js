@@ -677,6 +677,48 @@ console.log('\n--- isAgentInstalled Checks Both Directories ---');
   rmrf(reg); rmrf(home);
 }
 
+// ── Skill Type Detection ───────────────────────────────────
+
+console.log('\n--- getSkillType Detection ---');
+{
+  const { getSkillType } = require('./lib/discovery');
+  const commandsSkill = path.join(REGISTRY_DIR, 'skills', 'slides');
+  const skillmdSkill = path.join(REGISTRY_DIR, 'skills', 'pr-review-loop');
+  const emptyDir = tmpDir();
+  check('commands skill returns commands', getSkillType(commandsSkill) === 'commands');
+  check('skillmd skill returns skillmd', getSkillType(skillmdSkill) === 'skillmd');
+  check('empty dir returns null', getSkillType(emptyDir) === null);
+  rmrf(emptyDir);
+}
+
+console.log('\n--- listSkills Discovers Both Types ---');
+{
+  const { listSkills } = require('./lib/discovery');
+  const skills = listSkills(REGISTRY_DIR);
+  check('listSkills includes pr-review-loop', skills.includes('pr-review-loop'));
+  check('listSkills includes slides', skills.includes('slides'));
+}
+
+console.log('\n--- SKILL.md Skill Install and Uninstall ---');
+{
+  const home = tmpDir();
+  run(['install', '--skill', 'pr-review-loop'], { HOME: home });
+  const skillDst = path.join(home, '.claude', 'skills', 'pr-review-loop');
+  const isLink = fs.existsSync(skillDst) && fs.lstatSync(skillDst).isSymbolicLink();
+  check('skillmd symlink created', isLink);
+  if (isLink) {
+    const target = fs.realpathSync(skillDst);
+    check('symlink points to registry skill dir', target === path.join(REGISTRY_DIR, 'skills', 'pr-review-loop'));
+  }
+  // Verify SKILL.md accessible through symlink
+  check('SKILL.md accessible via symlink', fs.existsSync(path.join(skillDst, 'SKILL.md')));
+
+  // Uninstall
+  run(['uninstall', '--skill', 'pr-review-loop'], { HOME: home });
+  check('skillmd symlink removed after uninstall', !fs.existsSync(skillDst));
+  rmrf(home);
+}
+
 // ── Summary ─────────────────────────────────────────────────
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
