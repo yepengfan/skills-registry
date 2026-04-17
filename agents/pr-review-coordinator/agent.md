@@ -49,13 +49,16 @@ You receive from the orchestrator:
 
 Get per-file diff sizes:
 ```bash
-gh pr diff <PR> --stat
+BASE=$(git merge-base main HEAD)
+git diff $BASE HEAD --numstat
 ```
 
-Parse the output to extract file paths and changed line counts.
+Parse the output to extract file paths and changed line counts (insertions + deletions).
+
+**Important:** Do NOT use `gh pr diff --stat` — it is not a valid flag. Use `git diff --numstat` which outputs `<insertions>\t<deletions>\t<filepath>` per file.
 
 **Batching algorithm:**
-1. Parse per-file line counts from `--stat` output
+1. Parse per-file line counts from `--numstat` output (sum insertions + deletions)
 2. Sort files by diff size descending
 3. Greedily assign files to batches, each batch targeting ≤ 500 diff lines
 4. If a single file exceeds 500 lines, it gets its own batch
@@ -65,7 +68,22 @@ Parse the output to extract file paths and changed line counts.
 
 **Designate test runner:** The last batch is the designated test runner — only this batch's reviewer runs the test suite. All other batches skip tests to avoid redundant execution.
 
-### Step 2: Dispatch All Reviewers in Parallel
+### Step 2: Pre-fetch Diffs
+
+Before dispatching reviewers, fetch the actual diff text for each batch. Sub-agents must NOT run `gh` or `git diff` commands — they receive the diff text directly in their prompt.
+
+```bash
+BASE=$(git merge-base main HEAD)
+```
+
+For each batch, fetch the diff for all files in that batch:
+```bash
+git diff $BASE HEAD -- <file1> <file2> <file3>
+```
+
+Capture the full diff text output. This will be passed directly to the sub-agent.
+
+### Step 3: Dispatch All Reviewers in Parallel
 
 **Code reviewers** (one per batch):
 
@@ -79,6 +97,12 @@ Agent(
 ## Assigned Files
 You are assigned ONLY these files — do not review any other files:
 <file list with diff line counts>
+
+## Diff
+The diff for your assigned files is provided below. Do NOT run gh or git diff commands — analyze this diff directly.
+\`\`\`diff
+<pre-fetched diff text from Step 2>
+\`\`\`
 
 ## Test Runner
 <YES — run test suite after reviewing | NO — skip tests, another batch handles this>
@@ -153,7 +177,7 @@ Return a single JSON response to the orchestrator:
 
 - If a code reviewer fails or times out → report its batch as "review incomplete" with the files that were not reviewed. Other batches' results are still valid.
 - If the design reviewer fails → report `figma-design-match` as `pass: false` with detail explaining the failure.
-- If `gh pr diff --stat` fails → report error, cannot proceed.
+- If `git diff --numstat` fails → report error, cannot proceed.
 - If all reviewers in all batches fail → return an error response with no issues (don't fabricate results).
 
 ## Rules

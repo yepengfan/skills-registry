@@ -37,39 +37,29 @@ If invoked directly (outside the coordinator), review all files in the PR.
 
 These rules constrain how you read files. They exist because sub-agents have limited context — wasting it on redundant reads leaves nothing for analysis.
 
-1. **Never fetch the full monolithic diff.** Use `git diff $(gh pr view <PR> --json baseRefName --jq '.baseRefName')...HEAD -- <filepath>` to get one file at a time.
-2. **Use the Read tool for file context** — not `gh api`, `git show`, `git diff`, or `cat`. Read is the cheapest tool for file access.
-3. **Max 3 tool calls per changed file** — 1 for the diff, up to 2 for surrounding context. If you need more, you're over-reading.
+1. **Your diff is provided in the prompt.** Do NOT run `gh pr diff`, `git diff`, or any command to fetch diffs. The coordinator pre-fetched the diff and included it in your `## Diff` section.
+2. **Use the Read tool for additional file context** — not `gh api`, `git show`, `git diff`, or `cat`. Read is the cheapest tool for file access.
+3. **Max 2 Read tool calls per changed file** — only for surrounding context when the provided diff is insufficient.
 4. **Analyze as you read** — produce findings for each file before moving to the next. Do not read all files first then analyze.
-5. **Never read the same content twice** — if you fetched the diff via `gh pr diff`, do not re-fetch it via `git diff`. Pick one path and stick with it.
-6. **Never pipe through head/tail/sed** — if a diff is too large to read at once, use the Read tool on the file directly with offset/limit instead of chunking bash output.
+5. **Never read the same content twice** — pick one approach and stick with it.
+6. **Never pipe through head/tail/sed** — use the Read tool with offset/limit instead of chunking bash output.
 
 ## Workflow
 
-1. **Fetch PR metadata:**
-   ```bash
-   gh pr view <PR> --json number,title,body,baseRefName,headRefName
-   ```
+1. **Read the provided diff** from the `## Diff` section in your prompt. This contains the complete diff for all your assigned files. Do NOT run any commands to re-fetch it.
 
-2. **Review each assigned file** — process files one at a time, not all at once:
+2. **Review each assigned file** — process files one at a time from the provided diff:
 
-   For each file in your assigned file list:
+   For each file in the diff:
 
-   a. **Fetch this file's diff only:**
-      ```bash
-      git diff $(gh pr view <PR> --json baseRefName --jq '.baseRefName')...HEAD -- <filepath>
-      ```
-      This returns only the diff for this one file — never fetch the full monolithic diff.
+   a. **Analyze the diff hunks immediately.** Record any issues (bugs, security, conventions, missing tests) before moving to the next file.
 
-   b. **Analyze the diff immediately.** Record any issues (bugs, security, conventions, missing tests) before moving to the next file. Do not queue reading — analyze as you go.
-
-   c. **If the diff alone is insufficient**, use the Read tool on the full file at specific line ranges around the change. For example, if the diff shows changes at lines 40-60, read lines 20-80 for context:
+   b. **If the diff alone is insufficient**, use the Read tool on the full file at specific line ranges around the change. For example, if the diff shows changes at lines 40-60, read lines 20-80 for context:
       ```
       Read(file_path: "<filepath>", offset: 20, limit: 60)
       ```
-      Do NOT use `gh api`, `git show`, or `git diff` for this — the Read tool is faster and doesn't need pipe chunking.
 
-   d. **Move on** — never re-read this file via a different command. If you read the diff via `git diff`, do not re-read it via a second `git diff` or `cat`.
+   c. **Move on** — do not re-read this file.
 
 3. **Run tests** (only if your test runner flag is YES):
    ```bash
