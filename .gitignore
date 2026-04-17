@@ -2,3 +2,5 @@
 *.pptx
 !skills/slides/template.pptx
 node_modules/
+.omc/
+__pycache__/
