@@ -5,4 +5,4 @@ node_modules/
 .omc/
 __pycache__/
 # Runtime state from pr-review-loop skill
-.claude/state/
+.pr-review-state/
