@@ -2,7 +2,7 @@
 """
 Decide whether the PR review-fix loop should continue.
 
-Reads the state file (e.g. .claude/state/pr-review-loop.json). State shape:
+Reads the state file (e.g. .pr-review-state/pr-review-loop.json). State shape:
   {
     "round": N,
     "max_rounds": 8,

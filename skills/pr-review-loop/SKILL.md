@@ -21,8 +21,8 @@ If no PR is associated with the current branch, STOP and ask the user to check o
 If this is the first run in this session, create the state directory and initialize state:
 
 ```bash
-mkdir -p ./.claude/state
-cat > ./.claude/state/pr-review-loop.json <<'JSON'
+mkdir -p ./.pr-review-state
+cat > ./.pr-review-state/pr-review-loop.json <<'JSON'
 {
   "round": 0,
   "max_rounds": 8,
@@ -41,14 +41,15 @@ JSON
 bash skills/pr-review-loop/scripts/run_gates.sh
 ```
 
-Output goes to `./.claude/state/gates.json`. Read it to see the results. Do NOT re-run tests yourself. Do NOT assume gate results from other signals.
+Output goes to `./.pr-review-state/gates.json`. Read it to see the results. Do NOT re-run tests yourself. Do NOT assume gate results from other signals.
 
 ### 2. Invoke pr-reviewer subagent
 
-Use the Task tool with `subagent_type: "pr-reviewer"`. The prompt should include:
+Use the Task tool with `subagent_type: "pr-reviewer"`. Construct the prompt as follows:
 
-- The PR diff: get via `gh pr diff` (or `git diff <base>..HEAD` if gh unavailable)
-- The gate results from step 1, wrapped clearly:
+- Start with: "Review PR #{N}." where {N} is the PR number from `gh pr view`.
+- Include the PR diff: get via `gh pr diff` (or `git diff <base>..HEAD` if gh unavailable)
+- Include the gate results from step 1, wrapped clearly:
 
 ```
 DETERMINISTIC FACTS — do not reassess:
@@ -59,14 +60,17 @@ DETERMINISTIC FACTS — do not reassess:
 
 - Explicit instruction: "Output only JSON matching the schema in your agent prompt. No prose."
 
-Capture the reviewer's output and save to `./.claude/state/findings_raw_round_N.json` (where N is the current round number, starting from 1).
+Tell the reviewer explicitly where to write:
+`Write findings to .pr-review-state/findings_raw_round_<N>.json`
+
+The reviewer writes the JSON file itself using the Write tool and returns only a one-line confirmation. You do NOT need to capture and save the reviewer's response content — the file is already on disk. Verify the file exists before proceeding to Step 3.
 
 ### 3. Ground-verify every finding
 
 ```bash
 python3 skills/pr-review-loop/scripts/ground_findings.py \
-  --input ./.claude/state/findings_raw_round_N.json \
-  --output ./.claude/state/findings_grounded_round_N.json \
+  --input ./.pr-review-state/findings_raw_round_N.json \
+  --output ./.pr-review-state/findings_grounded_round_N.json \
   --repo .
 ```
 
@@ -76,7 +80,7 @@ The script reads each finding, opens the referenced file, and checks that `quote
 
 ### 4. Update state with this round's result
 
-Read `./.claude/state/pr-review-loop.json`, and append this round to `history`:
+Read `./.pr-review-state/pr-review-loop.json`, and append this round to `history`:
 
 ```json
 {
@@ -94,7 +98,7 @@ Write it back. Increment `round`.
 
 ```bash
 python3 skills/pr-review-loop/scripts/check_convergence.py \
-  --state ./.claude/state/pr-review-loop.json
+  --state ./.pr-review-state/pr-review-loop.json
 ```
 
 Reads exactly one line:
@@ -111,8 +115,8 @@ Only reached if step 5 returned `CONTINUE`. Filter the grounded findings to just
 
 ```bash
 jq '.findings | map(select(.severity == "must-fix"))' \
-  ./.claude/state/findings_grounded_round_N.json \
-  > ./.claude/state/fixer_input_round_N.json
+  ./.pr-review-state/findings_grounded_round_N.json \
+  > ./.pr-review-state/fixer_input_round_N.json
 ```
 
 If the filtered array is empty but `CONTINUE` was returned, something is off — go to step 7 anyway to record the round but don't invoke fixer.
@@ -126,7 +130,7 @@ After applying fixes, run tests/lint/build to verify, and commit to the current 
 <paste contents of fixer_input_round_N.json>
 ```
 
-Capture the fixer's status JSON and save to `./.claude/state/fixer_result_round_N.json`.
+Capture the fixer's status JSON and save to `./.pr-review-state/fixer_result_round_N.json`.
 
 ### 7. Loop back to step 1
 
@@ -181,7 +185,7 @@ All must-fix findings resolved. PR is ready for human review.
 
 ## Edge cases
 
-**Reviewer returns non-JSON.** The ground script expects `{"findings": [...]}` at minimum. If the reviewer output can't be parsed, that's a reviewer bug — save the raw output to `./.claude/state/reviewer_parse_error_round_N.log`, terminate the loop, and report to the user. Don't try to salvage.
+**Reviewer returns non-JSON.** The ground script expects `{"findings": [...]}` at minimum. If the reviewer output can't be parsed, that's a reviewer bug — save the raw output to `./.pr-review-state/reviewer_parse_error_round_N.log`, terminate the loop, and report to the user. Don't try to salvage.
 
 **Fixer returns `status: "failed"`.** Record in history (with `fix_attempted: true, fix_succeeded: false`), still check convergence. Likely leads to `FAIL_STALLED` on next round.
 

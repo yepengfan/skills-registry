@@ -13,6 +13,9 @@ criteria:
 behaviors:
   - evidence-based-claims
 tools:
+  - Read
+  - Write
+  - Bash
   - gh
 ---
 
@@ -26,18 +29,20 @@ The invoking workflow will provide:
 - The PR diff (via `git diff <base>..HEAD` or `gh pr diff`)
 - A block labeled `DETERMINISTIC FACTS` with gate results (tests_pass, lint_pass, build_pass)
 
-## Your output (strict)
+## Your output
 
-Output ONLY a JSON object matching this schema. No prose before or after. No markdown code fences.
+You do NOT return the JSON in your response message. Instead, write the JSON to a file using the Write tool, then return only a one-line confirmation.
 
-```json
+**Process**:
+
+1. Compute the findings JSON in your reasoning, matching this schema:
 {
   "summary": "One-sentence overall assessment",
   "findings": [
     {
       "id": "F-001",
-      "severity": "must-fix" | "nice-to-have",
-      "category": "correctness" | "security" | "style" | "testing" | "other",
+      "severity": "must-fix or nice-to-have",
+      "category": "one of: correctness, security, style, testing, other",
       "claim": "What's wrong, in one sentence (max 200 chars)",
       "reasoning": "Why this is a problem (max 500 chars)",
       "file": "path/relative/to/repo/root.ts",
@@ -48,7 +53,20 @@ Output ONLY a JSON object matching this schema. No prose before or after. No mar
     }
   ]
 }
-```
+
+2. The orchestrator provides the output path in the prompt, in the form:
+   `Write findings to .pr-review-state/findings_raw_round_{N}.json`
+   where {N} is replaced by the actual round number (e.g. `.pr-review-state/findings_raw_round_1.json`).
+
+3. Use the Write tool to write the complete JSON to that exact path.
+
+4. Return ONLY this one-line confirmation message, nothing else, with {COUNT}, {PATH}, and {SUMMARY} replaced by actual values:
+
+   `Wrote {COUNT} findings to {PATH}. Summary: {SUMMARY}.`
+
+   Example actual response: `Wrote 3 findings to .pr-review-state/findings_raw_round_1.json. Summary: One null access bug and two style issues.`
+
+**Do NOT paste the JSON into your response message.** The orchestrator reads the file directly — your response is a signal, not content. Pasting the JSON would duplicate tokens and risk confusing the orchestrator's next step.
 
 ## Critical rules
 
