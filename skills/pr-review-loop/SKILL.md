@@ -47,7 +47,7 @@ Output goes to `./.pr-review-state/gates.json`. Read it to see the results. Do N
 
 Use the Task tool with `subagent_type: "pr-reviewer"`. Construct the prompt as follows:
 
-- Start with: "Review PR #<N>."
+- Start with: "Review PR #{N}." where {N} is the PR number from `gh pr view`.
 - Include the PR diff: get via `gh pr diff` (or `git diff <base>..HEAD` if gh unavailable)
 - Include the gate results from step 1, wrapped clearly:
 

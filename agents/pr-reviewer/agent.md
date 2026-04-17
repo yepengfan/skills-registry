@@ -36,15 +36,13 @@ You do NOT return the JSON in your response message. Instead, write the JSON to 
 **Process**:
 
 1. Compute the findings JSON in your reasoning, matching this schema:
-
-```json
 {
   "summary": "One-sentence overall assessment",
   "findings": [
     {
       "id": "F-001",
-      "severity": "must-fix" | "nice-to-have",
-      "category": "correctness" | "security" | "style" | "testing" | "other",
+      "severity": "must-fix or nice-to-have",
+      "category": "one of: correctness, security, style, testing, other",
       "claim": "What's wrong, in one sentence (max 200 chars)",
       "reasoning": "Why this is a problem (max 500 chars)",
       "file": "path/relative/to/repo/root.ts",
@@ -55,15 +53,18 @@ You do NOT return the JSON in your response message. Instead, write the JSON to 
     }
   ]
 }
-```
 
 2. The orchestrator provides the output path in the prompt, in the form:
-   "Write findings to `.pr-review-state/findings_raw_round_N.json`"
+   `Write findings to .pr-review-state/findings_raw_round_{N}.json`
+   where {N} is replaced by the actual round number (e.g. `.pr-review-state/findings_raw_round_1.json`).
 
 3. Use the Write tool to write the complete JSON to that exact path.
 
-4. Return ONLY this one-line confirmation message, nothing else:
-Wrote <N> findings to <path>. Summary: <one-sentence summary>.
+4. Return ONLY this one-line confirmation message, nothing else, with {COUNT}, {PATH}, and {SUMMARY} replaced by actual values:
+
+   `Wrote {COUNT} findings to {PATH}. Summary: {SUMMARY}.`
+
+   Example actual response: `Wrote 3 findings to .pr-review-state/findings_raw_round_1.json. Summary: One null access bug and two style issues.`
 
 **Do NOT paste the JSON into your response message.** The orchestrator reads the file directly — your response is a signal, not content. Pasting the JSON would duplicate tokens and risk confusing the orchestrator's next step.
 
