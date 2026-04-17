@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Run deterministic gates for the PR review loop.
-# Writes ./.claude/state/gates.json and prints a one-line summary to stdout.
+# Writes ./.pr-review-state/gates.json and prints a one-line summary to stdout.
 # Never exits non-zero just because a gate failed — those results are captured in JSON.
 # Exits non-zero only on infrastructure failure (can't write state file, etc.).
 
 set -u
-STATE_DIR="./.claude/state"
+STATE_DIR="./.pr-review-state"
 mkdir -p "$STATE_DIR"
 
 # Gate commands — override by setting env vars or creating gate_config.json
