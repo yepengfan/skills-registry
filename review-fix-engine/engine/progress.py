@@ -12,6 +12,10 @@ def set_quiet(quiet: bool = True):
     _quiet = quiet
 
 
+def is_quiet() -> bool:
+    return _quiet
+
+
 class C:
     RESET = "\x1b[0m"
     DIM = "\x1b[2m"
