@@ -77,10 +77,10 @@ def _get_tag_state(tag: str) -> dict:
     return _tag_state[tag]
 
 
-def _render_combined_line():
+def _render_combined_line(force: bool = False):
     global _spin_idx, _last_render
     now = time.monotonic()
-    if now - _last_render < _RENDER_INTERVAL:
+    if not force and now - _last_render < _RENDER_INTERVAL:
         return
     _last_render = now
     _spin_idx += 1
@@ -104,15 +104,11 @@ def _render_combined_line():
 
     status = " | ".join(parts)
     cols = _terminal_width()
-    line = f" {C.MAGENTA}{spin}{C.RESET} {C.DIM}{status}{C.RESET} {C.DIM}({elapsed:.0f}s){C.RESET}"
-    plain_len = len(_strip_ansi(line))
-    if plain_len > cols - 1:
-        over = plain_len - cols + 4
-        status = status[:-over] + "..."
-        line = f" {C.MAGENTA}{spin}{C.RESET} {C.DIM}{status}{C.RESET} {C.DIM}({elapsed:.0f}s){C.RESET}"
-
-    sys.stdout.write(f"\r\x1b[2K{line}")
-    sys.stdout.flush()
+    max_status = cols - 12
+    if len(status) > max_status:
+        status = status[:max_status - 3] + "..."
+    line = f" {spin} {status} ({elapsed:.0f}s)"
+    print(f"\r{' ' * cols}\r{line}", end="", flush=True)
 
 
 def _strip_ansi(s: str) -> str:
@@ -156,8 +152,8 @@ def sdk_message(message, tag: str):
 
     elif isinstance(message, ResultMessage):
         if _quiet:
-            sys.stdout.write("\r\x1b[2K")
-            sys.stdout.flush()
+            cols = _terminal_width()
+            print(f"\r{' ' * cols}\r", end="", flush=True)
             _tag_state.pop(tag, None)
         cost = message.total_cost_usd
         turns = message.num_turns
