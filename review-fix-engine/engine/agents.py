@@ -134,15 +134,15 @@ PR diff:
 
 
 async def review_parallel(
-    reviewers: list[str], agents_dir: Path,
+    reviewers: list[str], prompts: dict[str, str],
     diff: str, gates_summary: str, round_num: int,
     cwd: Path, max_turns: int = 5,
 ) -> tuple[dict[str, list[Finding]], float]:
-    base_prompt = _load_prompt(agents_dir / "reviewer_base.md")
+    base_prompt = prompts["_base"]
 
     tasks = []
     for name in reviewers:
-        focus_prompt = _load_prompt(agents_dir / f"reviewer_{name}.md")
+        focus_prompt = prompts[name]
         tasks.append(review_single(
             name, base_prompt, focus_prompt,
             diff, gates_summary, round_num, cwd, max_turns,

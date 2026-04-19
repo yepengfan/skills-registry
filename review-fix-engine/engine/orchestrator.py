@@ -85,6 +85,11 @@ async def run(config: Config) -> dict:
     timer = p.Timer()
     agents_dir = Path(__file__).parent.parent / "agents"
 
+    # Pre-load prompts before checkout (checkout switches branch, removing these files)
+    prompts = {"_base": (agents_dir / "reviewer_base.md").read_text().strip()}
+    for name in config.reviewers:
+        prompts[name] = (agents_dir / f"reviewer_{name}.md").read_text().strip()
+
     print(f"{p.C.BOLD}=== Review-Fix Engine ==={p.C.RESET}")
     p.info("setup", f"cwd={config.cwd}")
     p.info("setup", f"reviewers={config.reviewers}")
@@ -114,7 +119,7 @@ async def run(config: Config) -> dict:
     p.phase("Review")
     findings_by_reviewer, review_cost = await agents.review_parallel(
         reviewers=config.reviewers,
-        agents_dir=agents_dir,
+        prompts=prompts,
         diff=diff,
         gates_summary=gates_summary,
         round_num=1,
