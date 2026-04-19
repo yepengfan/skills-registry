@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .orchestrator import run
-from .progress import C, info, success, error
+from .progress import C, info, success, error, set_quiet
 
 
 def parse_args() -> tuple[Config, Path | None]:
@@ -24,6 +24,7 @@ def parse_args() -> tuple[Config, Path | None]:
     parser.add_argument("--cwd", type=Path, default=None)
     parser.add_argument("--test-cmd", type=str, default="npm test")
     parser.add_argument("--output-json", type=Path, help="Write results JSON to file")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress LLM streaming output, show only progress")
     args = parser.parse_args()
 
     config = Config(
@@ -37,6 +38,8 @@ def parse_args() -> tuple[Config, Path | None]:
     )
     if args.cwd:
         config.cwd = args.cwd
+    if args.quiet:
+        set_quiet()
     return config, args.output_json
 
 

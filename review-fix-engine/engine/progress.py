@@ -3,6 +3,13 @@ from __future__ import annotations
 import sys
 import time
 
+_quiet = False
+
+
+def set_quiet(quiet: bool = True):
+    global _quiet
+    _quiet = quiet
+
 
 class C:
     RESET = "\x1b[0m"
@@ -56,19 +63,21 @@ def sdk_message(message, tag: str):
     from claude_agent_sdk import StreamEvent, AssistantMessage, ResultMessage, SystemMessage
 
     if isinstance(message, StreamEvent):
-        event = message.event
-        if isinstance(event, dict) and event.get("type") == "content_block_delta":
-            delta = event.get("delta", {})
-            if delta.get("type") == "text_delta":
-                sys.stdout.write(f"{C.DIM}{delta.get('text', '')}{C.RESET}")
-                sys.stdout.flush()
+        if not _quiet:
+            event = message.event
+            if isinstance(event, dict) and event.get("type") == "content_block_delta":
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    sys.stdout.write(f"{C.DIM}{delta.get('text', '')}{C.RESET}")
+                    sys.stdout.flush()
 
     elif isinstance(message, AssistantMessage):
-        content = getattr(getattr(message, "message", None), "content", None) or []
-        for block in content:
-            btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-            if btype == "tool_use":
-                name = block.get("name", "?") if isinstance(block, dict) else getattr(block, "name", "?")
+        if not _quiet:
+            content = getattr(getattr(message, "message", None), "content", None) or []
+            for block in content:
+                btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+                if btype == "tool_use":
+                    name = block.get("name", "?") if isinstance(block, dict) else getattr(block, "name", "?")
                 print(f"\n{C.CYAN}[{tag}]{C.RESET} {C.MAGENTA}tool:{C.RESET} {name}", flush=True)
 
     elif isinstance(message, ResultMessage):
