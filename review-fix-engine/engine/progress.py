@@ -66,28 +66,51 @@ def ground_result(grounded: list, dropped: list, duration_s: float):
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 _tag_state: dict[str, dict] = {}
+_spin_idx = 0
+_last_render = 0.0
+_RENDER_INTERVAL = 0.15
 
 
 def _get_tag_state(tag: str) -> dict:
     if tag not in _tag_state:
-        _tag_state[tag] = {"tokens": 0, "start": time.monotonic(), "snippet": "", "spin": 0}
+        _tag_state[tag] = {"tokens": 0, "start": time.monotonic(), "snippet": ""}
     return _tag_state[tag]
 
 
-def _render_progress_line(tag: str, state: dict):
-    elapsed = time.monotonic() - state["start"]
-    spin = _SPINNER[state["spin"] % len(_SPINNER)]
-    state["spin"] += 1
-    snippet = state["snippet"].replace("\n", " ").strip()
-    if len(snippet) > 60:
-        snippet = snippet[:57] + "..."
-    tokens = state["tokens"]
-    line = f"\r{C.CYAN}[{tag}]{C.RESET} {C.MAGENTA}{spin}{C.RESET} {tokens} tokens ({elapsed:.0f}s)"
-    if snippet:
-        line += f" {C.DIM}▸ {snippet}{C.RESET}"
+def _render_combined_line():
+    global _spin_idx, _last_render
+    now = time.monotonic()
+    if now - _last_render < _RENDER_INTERVAL:
+        return
+    _last_render = now
+    _spin_idx += 1
+
+    if not _tag_state:
+        return
+
+    spin = _SPINNER[_spin_idx % len(_SPINNER)]
+    earliest = min(s["start"] for s in _tag_state.values())
+    elapsed = now - earliest
+
+    parts = []
+    for tag, s in _tag_state.items():
+        snippet = s["snippet"].replace("\n", " ").strip()
+        if len(snippet) > 30:
+            snippet = snippet[:27] + "..."
+        part = f"{tag}:{s['tokens']}t"
+        if snippet:
+            part += f" {snippet}"
+        parts.append(part)
+
+    status = " | ".join(parts)
     cols = _terminal_width()
-    if len(_strip_ansi(line)) > cols:
-        line = line[:cols + 40] + C.RESET
+    line = f" {C.MAGENTA}{spin}{C.RESET} {C.DIM}{status}{C.RESET} {C.DIM}({elapsed:.0f}s){C.RESET}"
+    plain_len = len(_strip_ansi(line))
+    if plain_len > cols - 1:
+        over = plain_len - cols + 4
+        status = status[:-over] + "..."
+        line = f" {C.MAGENTA}{spin}{C.RESET} {C.DIM}{status}{C.RESET} {C.DIM}({elapsed:.0f}s){C.RESET}"
+
     sys.stdout.write(f"\r\x1b[2K{line}")
     sys.stdout.flush()
 
@@ -117,7 +140,7 @@ def sdk_message(message, tag: str):
                     state = _get_tag_state(tag)
                     state["tokens"] += len(text.split())
                     state["snippet"] = text
-                    _render_progress_line(tag, state)
+                    _render_combined_line()
                 else:
                     sys.stdout.write(f"{C.DIM}{text}{C.RESET}")
                     sys.stdout.flush()
@@ -140,6 +163,8 @@ def sdk_message(message, tag: str):
         turns = message.num_turns
         cost_str = f"${cost:.4f}" if cost else "?"
         print(f"{C.CYAN}[{tag}]{C.RESET} {C.GREEN}Done{C.RESET} (cost: {cost_str}, turns: {turns or '?'})", flush=True)
+        if _quiet and _tag_state:
+            _render_combined_line()
 
 
 class Timer:
