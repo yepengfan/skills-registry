@@ -1,5 +1,6 @@
 # engine/progress.py
 from __future__ import annotations
+import os
 import sys
 import time
 
@@ -59,16 +60,62 @@ def ground_result(grounded: list, dropped: list, duration_s: float):
         print(f"  {C.RED}\u2717{C.RESET} {d.get('id', '?')}: {d.get('grounding_error', '?')}", flush=True)
 
 
+_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_tag_state: dict[str, dict] = {}
+
+
+def _get_tag_state(tag: str) -> dict:
+    if tag not in _tag_state:
+        _tag_state[tag] = {"tokens": 0, "start": time.monotonic(), "snippet": "", "spin": 0}
+    return _tag_state[tag]
+
+
+def _render_progress_line(tag: str, state: dict):
+    elapsed = time.monotonic() - state["start"]
+    spin = _SPINNER[state["spin"] % len(_SPINNER)]
+    state["spin"] += 1
+    snippet = state["snippet"].replace("\n", " ").strip()
+    if len(snippet) > 60:
+        snippet = snippet[:57] + "..."
+    tokens = state["tokens"]
+    line = f"\r{C.CYAN}[{tag}]{C.RESET} {C.MAGENTA}{spin}{C.RESET} {tokens} tokens ({elapsed:.0f}s)"
+    if snippet:
+        line += f" {C.DIM}▸ {snippet}{C.RESET}"
+    cols = _terminal_width()
+    if len(_strip_ansi(line)) > cols:
+        line = line[:cols + 40] + C.RESET
+    sys.stdout.write(f"\r\x1b[2K{line}")
+    sys.stdout.flush()
+
+
+def _strip_ansi(s: str) -> str:
+    import re
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+
+
+def _terminal_width() -> int:
+    try:
+        return os.get_terminal_size().columns
+    except (AttributeError, ValueError, OSError):
+        return 120
+
+
 def sdk_message(message, tag: str):
     from claude_agent_sdk import StreamEvent, AssistantMessage, ResultMessage, SystemMessage
 
     if isinstance(message, StreamEvent):
-        if not _quiet:
-            event = message.event
-            if isinstance(event, dict) and event.get("type") == "content_block_delta":
-                delta = event.get("delta", {})
-                if delta.get("type") == "text_delta":
-                    sys.stdout.write(f"{C.DIM}{delta.get('text', '')}{C.RESET}")
+        event = message.event
+        if isinstance(event, dict) and event.get("type") == "content_block_delta":
+            delta = event.get("delta", {})
+            if delta.get("type") == "text_delta":
+                text = delta.get("text", "")
+                if _quiet:
+                    state = _get_tag_state(tag)
+                    state["tokens"] += len(text.split())
+                    state["snippet"] = text
+                    _render_progress_line(tag, state)
+                else:
+                    sys.stdout.write(f"{C.DIM}{text}{C.RESET}")
                     sys.stdout.flush()
 
     elif isinstance(message, AssistantMessage):
@@ -78,13 +125,17 @@ def sdk_message(message, tag: str):
                 btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
                 if btype == "tool_use":
                     name = block.get("name", "?") if isinstance(block, dict) else getattr(block, "name", "?")
-                print(f"\n{C.CYAN}[{tag}]{C.RESET} {C.MAGENTA}tool:{C.RESET} {name}", flush=True)
+                    print(f"\n{C.CYAN}[{tag}]{C.RESET} {C.MAGENTA}tool:{C.RESET} {name}", flush=True)
 
     elif isinstance(message, ResultMessage):
+        if _quiet:
+            sys.stdout.write("\r\x1b[2K")
+            sys.stdout.flush()
+            _tag_state.pop(tag, None)
         cost = message.total_cost_usd
         turns = message.num_turns
         cost_str = f"${cost:.4f}" if cost else "?"
-        print(f"\n{C.CYAN}[{tag}]{C.RESET} {C.GREEN}Done{C.RESET} (cost: {cost_str}, turns: {turns or '?'})", flush=True)
+        print(f"{C.CYAN}[{tag}]{C.RESET} {C.GREEN}Done{C.RESET} (cost: {cost_str}, turns: {turns or '?'})", flush=True)
 
 
 class Timer:
