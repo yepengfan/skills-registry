@@ -69,6 +69,7 @@ _tag_state: dict[str, dict] = {}
 _spin_idx = 0
 _last_render = 0.0
 _RENDER_INTERVAL = 0.15
+_stderr = sys.stderr
 
 
 def _get_tag_state(tag: str) -> dict:
@@ -107,13 +108,14 @@ def _render_combined_line(force: bool = False):
     max_status = cols - 12
     if len(status) > max_status:
         status = status[:max_status - 3] + "..."
-    line = f" {spin} {status} ({elapsed:.0f}s)"
-    print(f"\r{' ' * cols}\r{line}", end="", flush=True)
+
+    _stderr.write(f"\r\033[2K {spin} {status} ({elapsed:.0f}s)")
+    _stderr.flush()
 
 
-def _strip_ansi(s: str) -> str:
-    import re
-    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+def _clear_progress_line():
+    _stderr.write("\r\033[2K")
+    _stderr.flush()
 
 
 def _terminal_width() -> int:
@@ -152,8 +154,7 @@ def sdk_message(message, tag: str):
 
     elif isinstance(message, ResultMessage):
         if _quiet:
-            cols = _terminal_width()
-            print(f"\r{' ' * cols}\r", end="", flush=True)
+            _clear_progress_line()
             _tag_state.pop(tag, None)
         cost = message.total_cost_usd
         turns = message.num_turns
