@@ -81,6 +81,41 @@ def _gates_summary(config: Config) -> str:
     )
 
 
+def _read_file_contexts(findings: list[Finding], cwd: Path, context_lines: int = 20) -> dict[str, str]:
+    contexts: dict[str, str] = {}
+    for f in findings:
+        if f.file in contexts:
+            continue
+        file_path = cwd / f.file
+        if not file_path.is_file():
+            continue
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            start = max(0, f.line_start - 1 - context_lines)
+            end = min(len(lines), f.line_end + context_lines)
+            numbered = [f"{i+1:4d} | {lines[i]}" for i in range(start, end)]
+            contexts[f.file] = "\n".join(numbered)
+        except Exception:
+            continue
+    return contexts
+
+
+def _run_post_fix_gates(config: Config) -> bool:
+    if not config.test_cmd:
+        p.info("gates", "No test command — skipping post-fix gates")
+        return True
+    p.info("gates", f"Running: {config.test_cmd}")
+    result = subprocess.run(
+        config.test_cmd, shell=True, capture_output=True, cwd=config.cwd,
+    )
+    if result.returncode == 0:
+        p.success("gates", "Tests pass after fix")
+        return True
+    else:
+        p.error("gates", "Tests FAILED after fix")
+        return False
+
+
 async def run(config: Config) -> dict:
     timer = p.Timer()
     agents_dir = Path(__file__).parent.parent / "agents"
@@ -89,6 +124,7 @@ async def run(config: Config) -> dict:
     prompts = {"_base": (agents_dir / "reviewer_base.md").read_text().strip()}
     for name in config.reviewers:
         prompts[name] = (agents_dir / f"reviewer_{name}.md").read_text().strip()
+    fixer_prompt = (agents_dir / "fixer.md").read_text().strip() if config.fix else ""
 
     print(f"{p.C.BOLD}=== Review-Fix Engine ==={p.C.RESET}")
     p.info("setup", f"cwd={config.cwd}")
@@ -164,6 +200,64 @@ async def run(config: Config) -> dict:
     ground_result = grounding.verify(reflected, config.cwd)
     p.ground_result(ground_result.grounded, ground_result.dropped, gt.elapsed())
 
+    # Fix
+    fix_cost = 0.0
+    fix_status = "skipped"
+    must_fix = [f for f in ground_result.grounded if f.severity == Severity.MUST_FIX]
+
+    if config.fix and must_fix and not config.dry_run:
+        p.phase("Fix")
+        p.info("fix", f"{len(must_fix)} must-fix findings to fix")
+
+        file_contexts = _read_file_contexts(must_fix, config.cwd)
+
+        if p.is_quiet():
+            p.init_reviewers(["fixer"])
+
+        try:
+            fix_result, fix_cost = await agents.fix_findings(
+                findings=must_fix,
+                fixer_prompt=fixer_prompt,
+                file_contexts=file_contexts,
+                cwd=config.cwd,
+                max_turns=config.fixer_max_turns,
+                model=config.fix_model or config.model,
+                test_cmd=config.test_cmd,
+            )
+            total_cost += fix_cost
+
+            if p.is_quiet():
+                p.finish_progress("fixer", len(must_fix), fix_cost, timer.elapsed())
+
+            # Run gates after fix
+            p.phase("Post-Fix Gates")
+            gates_ok = _run_post_fix_gates(config)
+
+            if gates_ok:
+                subprocess.run(["git", "add", "-A"], cwd=config.cwd, capture_output=True)
+                subprocess.run(
+                    ["git", "commit", "-m", f"fix: auto-fix {len(must_fix)} must-fix findings"],
+                    cwd=config.cwd, capture_output=True,
+                )
+                p.success("fix", f"Committed fixes for {len(must_fix)} findings (${fix_cost:.2f})")
+                fix_status = "committed"
+            else:
+                subprocess.run(["git", "checkout", "."], cwd=config.cwd, capture_output=True)
+                p.warn("fix", "Gates failed after fix — reverted all changes")
+                fix_status = "reverted"
+
+        except Exception as e:
+            if p.is_quiet():
+                p.finish_progress("fixer", 0, fix_cost, timer.elapsed())
+            subprocess.run(["git", "checkout", "."], cwd=config.cwd, capture_output=True)
+            p.error("fix", f"Fixer failed: {e} — reverted")
+            fix_status = "failed"
+
+    elif config.fix and must_fix and config.dry_run:
+        p.warn("dry-run", f"Skipping fix for {len(must_fix)} must-fix findings")
+    elif not must_fix and ground_result.grounded:
+        p.info("fix", "No must-fix findings — skipping fix")
+
     # Output
     stats = {
         "total_cost_usd": total_cost,
@@ -174,6 +268,8 @@ async def run(config: Config) -> dict:
         "after_dedup": len(merged),
         "after_reflection": len(reflected),
         "after_grounding": ground_result.grounded_count,
+        "fix_status": fix_status,
+        "fix_cost": fix_cost,
     }
 
     # Post to GitHub

@@ -228,3 +228,55 @@ Diff for reference:
         info("reflect", f"filtered {dropped} low-confidence findings (threshold={score_threshold})")
 
     return filtered, cost
+
+
+async def fix_findings(
+    findings: list[Finding],
+    fixer_prompt: str,
+    file_contexts: dict[str, str],
+    cwd: Path,
+    max_turns: int = 30,
+    model: str | None = None,
+    test_cmd: str = "",
+) -> tuple[str | None, float]:
+    findings_text = "\n\n".join(
+        f"### {f.id}: {f.claim}\n"
+        f"- **File:** {f.file}:{f.line_start}-{f.line_end}\n"
+        f"- **Severity:** {f.severity.value}\n"
+        f"- **Category:** {f.category.value}\n"
+        f"- **Quoted code:**\n```\n{f.quoted_code}\n```\n"
+        f"- **Suggested fix:** {f.suggested_fix}"
+        for f in findings
+    )
+
+    context_text = "\n\n".join(
+        f"### {path}\n```\n{content}\n```"
+        for path, content in file_contexts.items()
+    )
+
+    test_instruction = f"\n\nAfter applying all fixes, run: `{test_cmd}`" if test_cmd else ""
+
+    prompt = f"""{fixer_prompt}
+
+---
+
+## Findings to fix ({len(findings)} must-fix)
+
+{findings_text}
+
+## File contents (for context)
+
+{context_text}
+{test_instruction}"""
+
+    options = ClaudeAgentOptions(
+        permission_mode="dontAsk",
+        model=model,
+        cwd=cwd,
+        max_turns=max_turns,
+        include_partial_messages=True,
+    )
+
+    result, last_text = await _run_query(prompt, options, "fixer")
+    cost = result.total_cost_usd or 0.0
+    return result.result or last_text, cost

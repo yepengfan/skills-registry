@@ -31,6 +31,8 @@ class Config:
     score_threshold: int = 5
 
     model: str = "anthropic.claude-4-6-sonnet[1m]"
+    fix: bool = True
+    fix_model: str | None = None
     reviewers: list[str] = field(default_factory=lambda: ["security", "logic", "edge_case"])
 
     state_dir: str = ".pr-review-state"

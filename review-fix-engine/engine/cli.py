@@ -26,6 +26,8 @@ def parse_args() -> tuple[Config, Path | None]:
     parser.add_argument("--output-json", type=Path, help="Write results JSON to file")
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress LLM streaming output, show only progress")
     parser.add_argument("--model", type=str, default="anthropic.claude-4-6-sonnet[1m]", help="Model for reviewer agents (default: sonnet)")
+    parser.add_argument("--no-fix", action="store_true", help="Skip fix phase (review only)")
+    parser.add_argument("--fix-model", type=str, default=None, help="Model for fixer agent (defaults to --model)")
     args = parser.parse_args()
 
     config = Config(
@@ -34,6 +36,8 @@ def parse_args() -> tuple[Config, Path | None]:
         diff_file=args.diff_file,
         dry_run=args.dry_run,
         model=args.model,
+        fix=not args.no_fix,
+        fix_model=args.fix_model,
         reviewers=args.reviewers.split(","),
         score_threshold=args.score_threshold,
         test_cmd=args.test_cmd,
