@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Severity(str, Enum):
@@ -28,6 +28,12 @@ class Finding(BaseModel):
     quoted_code: str = Field(description="Verbatim code from the diff")
     suggested_fix: str = Field(description="Concrete fix")
     source_reviewer: str = Field(default="", description="Which reviewer found this")
+
+    @model_validator(mode="after")
+    def check_line_range(self) -> "Finding":
+        if self.line_end < self.line_start:
+            raise ValueError(f"line_end ({self.line_end}) < line_start ({self.line_start})")
+        return self
 
 
 class ReviewOutput(BaseModel):

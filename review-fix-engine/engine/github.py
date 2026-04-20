@@ -43,11 +43,14 @@ def post_pr_review(pr_number: int, repo: str, findings: list[Finding],
     summary = format_review_summary(findings, stats)
     comments = []
     for f in findings:
-        comments.append({
+        comment = {
             "path": f.file,
-            "line": f.line_start,
+            "line": f.line_end,
             "body": format_comment_body(f),
-        })
+        }
+        if f.line_end > f.line_start:
+            comment["start_line"] = f.line_start
+        comments.append(comment)
 
     payload = json.dumps({
         "body": summary,

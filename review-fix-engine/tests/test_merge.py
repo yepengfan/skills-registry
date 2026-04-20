@@ -2,11 +2,11 @@ from engine.schema import Finding, Severity, Category
 from engine.merge import merge_and_dedup
 
 
-def _f(id: str, file: str = "a.js", line_start: int = 1, line_end: int = 1,
+def _f(id: str, file: str = "a.js", line_start: int = 1, line_end: int | None = None,
        severity: Severity = Severity.MUST_FIX, source: str = "logic") -> Finding:
     return Finding(
         id=id, severity=severity, category=Category.CORRECTNESS,
-        claim="issue", file=file, line_start=line_start, line_end=line_end,
+        claim="issue", file=file, line_start=line_start, line_end=line_end or line_start,
         quoted_code="x", suggested_fix="y", source_reviewer=source,
     )
 

@@ -23,6 +23,8 @@ def parse_args() -> tuple[Config, Path | None]:
     parser.add_argument("--score-threshold", type=int, default=5, help="Self-reflection score threshold (0-10)")
     parser.add_argument("--cwd", type=Path, default=None)
     parser.add_argument("--test-cmd", type=str, default="npm test")
+    parser.add_argument("--lint-cmd", type=str, default="", help="Lint command for gates (e.g. 'eslint .')")
+    parser.add_argument("--build-cmd", type=str, default="", help="Build command for gates (e.g. 'tsc --noEmit')")
     parser.add_argument("--output-json", type=Path, help="Write results JSON to file")
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress LLM streaming output, show only progress")
     parser.add_argument("--model", type=str, default="anthropic.claude-4-6-sonnet[1m]", help="Model for reviewer agents (default: sonnet)")
@@ -41,6 +43,8 @@ def parse_args() -> tuple[Config, Path | None]:
         reviewers=args.reviewers.split(","),
         score_threshold=args.score_threshold,
         test_cmd=args.test_cmd,
+        lint_cmd=args.lint_cmd,
+        build_cmd=args.build_cmd,
     )
     if args.cwd:
         config.cwd = args.cwd

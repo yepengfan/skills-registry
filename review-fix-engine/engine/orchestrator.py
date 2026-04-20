@@ -66,14 +66,17 @@ def _get_diff(config: Config) -> str:
     return ""
 
 
+def _run_gate(label: str, cmd: str, cwd: Path) -> bool:
+    if not cmd:
+        return True
+    result = subprocess.run(cmd, shell=True, capture_output=True, cwd=cwd)
+    return result.returncode == 0
+
+
 def _gates_summary(config: Config) -> str:
-    # test_cmd is user-provided, so shell=True is intentional here
-    test_result = subprocess.run(
-        config.test_cmd, shell=True, capture_output=True, cwd=config.cwd,
-    ) if config.test_cmd else None
-    tests_pass = test_result.returncode == 0 if test_result else True
-    lint_pass = True  # TODO Phase 2
-    build_pass = True
+    tests_pass = _run_gate("test", config.test_cmd, config.cwd)
+    lint_pass = _run_gate("lint", config.lint_cmd, config.cwd)
+    build_pass = _run_gate("build", config.build_cmd, config.cwd)
     return (
         f"- tests_pass: {str(tests_pass).lower()}\n"
         f"- lint_pass: {str(lint_pass).lower()}\n"
@@ -112,19 +115,37 @@ def _read_file_contexts(findings: list[Finding], cwd: Path, context_lines: int =
 
 
 def _run_post_fix_gates(config: Config) -> bool:
-    if not config.test_cmd:
-        p.info("gates", "No test command — skipping post-fix gates")
+    gate_cmds = [("test", config.test_cmd), ("lint", config.lint_cmd), ("build", config.build_cmd)]
+    has_any = any(cmd for _, cmd in gate_cmds)
+    if not has_any:
+        p.info("gates", "No gate commands configured — skipping")
         return True
-    p.info("gates", f"Running: {config.test_cmd}")
+    all_ok = True
+    for label, cmd in gate_cmds:
+        if not cmd:
+            continue
+        p.info("gates", f"Running {label}: {cmd}")
+        result = subprocess.run(cmd, shell=True, capture_output=True, cwd=config.cwd)
+        if result.returncode == 0:
+            p.success("gates", f"{label} passed")
+        else:
+            p.error("gates", f"{label} FAILED")
+            all_ok = False
+    return all_ok
+
+
+def _revert_changes(cwd: Path):
+    subprocess.run(["git", "checkout", "."], cwd=cwd, capture_output=True)
+    subprocess.run(["git", "clean", "-fd"], cwd=cwd, capture_output=True)
+
+
+def _audit_fix_scope(findings: list[Finding], cwd: Path) -> list[str]:
+    allowed = set(f.file for f in findings)
     result = subprocess.run(
-        config.test_cmd, shell=True, capture_output=True, cwd=config.cwd,
+        ["git", "diff", "--name-only"], cwd=cwd, capture_output=True, text=True,
     )
-    if result.returncode == 0:
-        p.success("gates", "Tests pass after fix")
-        return True
-    else:
-        p.error("gates", "Tests FAILED after fix")
-        return False
+    changed = set(line for line in result.stdout.strip().splitlines() if line)
+    return sorted(changed - allowed)
 
 
 async def run(config: Config) -> dict:
@@ -240,28 +261,36 @@ async def run(config: Config) -> dict:
             if p.is_quiet():
                 p.finish_progress("fixer", len(must_fix), fix_cost, timer.elapsed())
 
-            # Run gates after fix
-            p.phase("Post-Fix Gates")
-            gates_ok = _run_post_fix_gates(config)
-
-            if gates_ok:
-                subprocess.run(["git", "add", "-A"], cwd=config.cwd, capture_output=True)
-                subprocess.run(
-                    ["git", "commit", "-m", f"fix: auto-fix {len(must_fix)} must-fix findings"],
-                    cwd=config.cwd, capture_output=True,
-                )
-                subprocess.run(["git", "push"], cwd=config.cwd, capture_output=True)
-                p.success("fix", f"Committed and pushed fixes for {len(must_fix)} findings (${fix_cost:.2f})")
-                fix_status = "committed"
+            # Scope audit
+            violations = _audit_fix_scope(must_fix, config.cwd)
+            if violations:
+                p.warn("scope", f"Fixer modified files outside findings: {violations}")
+                _revert_changes(config.cwd)
+                fix_status = "scope_violation"
             else:
-                subprocess.run(["git", "checkout", "."], cwd=config.cwd, capture_output=True)
-                p.warn("fix", "Gates failed after fix — reverted all changes")
-                fix_status = "reverted"
+                # Run gates after fix
+                p.phase("Post-Fix Gates")
+                gates_ok = _run_post_fix_gates(config)
+
+                if gates_ok:
+                    files_to_stage = list(set(f.file for f in must_fix))
+                    subprocess.run(["git", "add"] + files_to_stage, cwd=config.cwd, capture_output=True)
+                    subprocess.run(
+                        ["git", "commit", "-m", f"fix: auto-fix {len(must_fix)} must-fix findings"],
+                        cwd=config.cwd, capture_output=True,
+                    )
+                    subprocess.run(["git", "push"], cwd=config.cwd, capture_output=True)
+                    p.success("fix", f"Committed and pushed fixes for {len(must_fix)} findings (${fix_cost:.2f})")
+                    fix_status = "committed"
+                else:
+                    _revert_changes(config.cwd)
+                    p.warn("fix", "Gates failed after fix — reverted all changes")
+                    fix_status = "reverted"
 
         except Exception as e:
             if p.is_quiet():
                 p.finish_progress("fixer", 0, fix_cost, timer.elapsed())
-            subprocess.run(["git", "checkout", "."], cwd=config.cwd, capture_output=True)
+            _revert_changes(config.cwd)
             p.error("fix", f"Fixer failed: {e} — reverted")
             fix_status = "failed"
 

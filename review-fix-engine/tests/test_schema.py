@@ -31,6 +31,15 @@ class TestFinding:
                 quoted_code="x", suggested_fix="y",
             )
 
+    def test_line_end_less_than_line_start_rejected(self):
+        import pytest
+        with pytest.raises(Exception):
+            Finding(
+                id="F-001", severity=Severity.MUST_FIX, category=Category.CORRECTNESS,
+                claim="Bug", file="a.js", line_start=10, line_end=5,
+                quoted_code="x", suggested_fix="y",
+            )
+
 
 class TestReviewOutput:
     def test_empty_findings_valid(self):
