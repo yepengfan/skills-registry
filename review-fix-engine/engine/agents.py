@@ -12,7 +12,7 @@ from claude_agent_sdk import (
 )
 
 from .schema import Finding, ReviewOutput
-from .progress import sdk_message, info, warn, is_quiet, update_progress, init_reviewers, finish_progress, get_tag_elapsed
+from .progress import sdk_message, info, warn, is_quiet, update_progress, init_reviewers, finish_progress, get_tag_elapsed, start_progress_ticker, stop_progress_ticker
 
 
 def _load_prompt(path: Path) -> str:
@@ -145,6 +145,7 @@ async def review_parallel(
 
     if is_quiet():
         init_reviewers(reviewers)
+        await start_progress_ticker()
 
     tasks = []
     for name in reviewers:
@@ -155,6 +156,9 @@ async def review_parallel(
         ))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    if is_quiet():
+        stop_progress_ticker()
 
     findings_by_reviewer: dict[str, list[Finding]] = {}
     total_cost = 0.0

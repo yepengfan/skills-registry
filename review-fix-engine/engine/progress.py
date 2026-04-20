@@ -72,6 +72,7 @@ _last_render = 0.0
 _RENDER_INTERVAL = 0.15
 _stderr = sys.stderr
 _block_initialized = False
+_refresh_task = None
 
 
 def init_reviewers(tags: list[str]):
@@ -89,6 +90,26 @@ def init_reviewers(tags: list[str]):
         _stderr.write("\n")
     _stderr.flush()
     _block_initialized = True
+
+
+async def start_progress_ticker():
+    import asyncio
+    global _refresh_task
+
+    async def _tick():
+        while True:
+            await asyncio.sleep(1.0)
+            if _block_initialized and any(not s.get("done") for s in _tag_state.values()):
+                _render_block(force=True)
+
+    _refresh_task = asyncio.create_task(_tick())
+
+
+def stop_progress_ticker():
+    global _refresh_task
+    if _refresh_task and not _refresh_task.done():
+        _refresh_task.cancel()
+        _refresh_task = None
 
 
 def _get_tag_state(tag: str) -> dict:
@@ -158,7 +179,7 @@ def _render_block(force: bool = False):
                 detail += f" {s['tokens']}t"
             if snippet:
                 detail += f" {snippet}"
-            elapsed = s.get("elapsed", 0.0)
+            elapsed = time.monotonic() - s.get("start", now)
             line = f"  {C.CYAN}[{padded}]{C.RESET}  {C.MAGENTA}{spin}{C.RESET} {detail} {C.DIM}({elapsed:.0f}s){C.RESET}"
         _stderr.write(f"\r\033[2K{line}\n")
 
