@@ -141,10 +141,15 @@ def _revert_changes(cwd: Path):
 
 def _audit_fix_scope(findings: list[Finding], cwd: Path) -> list[str]:
     allowed = set(f.file for f in findings)
-    result = subprocess.run(
+    tracked = subprocess.run(
         ["git", "diff", "--name-only"], cwd=cwd, capture_output=True, text=True,
     )
-    changed = set(line for line in result.stdout.strip().splitlines() if line)
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"], cwd=cwd, capture_output=True, text=True,
+    )
+    changed = set(
+        line for line in (tracked.stdout + untracked.stdout).strip().splitlines() if line
+    )
     return sorted(changed - allowed)
 
 

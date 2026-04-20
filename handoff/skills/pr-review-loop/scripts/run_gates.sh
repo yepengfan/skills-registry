@@ -8,16 +8,18 @@ set -u
 STATE_DIR="./.claude/state"
 mkdir -p "$STATE_DIR"
 
-# Gate commands — override by setting env vars or creating gate_config.json
-CONFIG="${GATE_CONFIG:-./gate_config.json}"
+# Gate commands — override by setting env vars or via GATE_CONFIG (must be an absolute path
+# to a file outside the repo, e.g. ~/.config/pr-review-loop/gate_config.json).
+# Relative paths are intentionally rejected to prevent a malicious PR from injecting
+# arbitrary commands via a gate_config.json committed inside the checked-out tree.
 TESTS_CMD="${TESTS_CMD:-npm test}"
 LINT_CMD="${LINT_CMD:-npm run lint}"
 BUILD_CMD="${BUILD_CMD:-npm run build}"
 
-if [ -f "$CONFIG" ] && command -v jq >/dev/null 2>&1; then
-  t=$(jq -r '.tests // empty' "$CONFIG" 2>/dev/null || true)
-  l=$(jq -r '.lint // empty' "$CONFIG" 2>/dev/null || true)
-  b=$(jq -r '.build // empty' "$CONFIG" 2>/dev/null || true)
+if [ -n "${GATE_CONFIG:-}" ] && [[ "$GATE_CONFIG" = /* ]] && [ -f "$GATE_CONFIG" ] && command -v jq >/dev/null 2>&1; then
+  t=$(jq -r '.tests // empty' "$GATE_CONFIG" 2>/dev/null || true)
+  l=$(jq -r '.lint // empty' "$GATE_CONFIG" 2>/dev/null || true)
+  b=$(jq -r '.build // empty' "$GATE_CONFIG" 2>/dev/null || true)
   [ -n "$t" ] && TESTS_CMD="$t"
   [ -n "$l" ] && LINT_CMD="$l"
   [ -n "$b" ] && BUILD_CMD="$b"
