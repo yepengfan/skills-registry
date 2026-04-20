@@ -171,7 +171,7 @@ async def run(config: Config) -> dict:
     figma_script_template = ""
     dom_script_template = ""
     diff_script_path = None
-    if not config.skip_design and config.dev_cmd:
+    if not config.skip_design:
         try:
             figma_extractor_prompt = (agents_dir / "extractor_figma.md").read_text().strip()
             dom_extractor_prompt = (agents_dir / "extractor_dom.md").read_text().strip()
@@ -260,14 +260,16 @@ async def run(config: Config) -> dict:
     design_cost = 0.0
     all_grounded = list(ground_result.grounded)
 
-    if not config.skip_design and config.dev_cmd and figma_extractor_prompt and diff_script_path:
+    if not config.skip_design and figma_extractor_prompt and diff_script_path:
         steering = find_steering(config.cwd)
         if steering:
             p.phase("Design Check")
             p.info("design", f"Figma: {steering.get('figma_url', '?')}")
             p.info("design", f"Route: {steering.get('page_route', '/')}")
 
-            server = await start_dev_server(config.dev_cmd, steering.get("dev_port", config.dev_port), config.cwd)
+            server = None
+            if config.dev_cmd:
+                server = await start_dev_server(config.dev_cmd, steering.get("dev_port", config.dev_port), config.cwd)
             try:
                 page_url = f"http://localhost:{steering.get('dev_port', config.dev_port)}{steering['page_route']}"
                 node_id = steering.get("figma_node_id", "")
